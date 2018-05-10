@@ -4,6 +4,9 @@
 //
 #define IDI_ICON                        102
 #define IDS_TITLE                       103
+#define IDS_ERROR_REGISTER_CLASS_CAPTION 104
+#define IDS_ERROR_CREATE_MAIN_WINDOW_CAPTION 105
+#define IDS_ERROR_MESSAGE_LOOP_CAPTION  106
 
 // Next default values for new objects
 // 
