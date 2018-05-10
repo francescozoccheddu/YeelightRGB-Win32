@@ -1,5 +1,9 @@
+
+#ifndef _LEARN
+
 #pragma region include and define
 #include <windows.h>
+#include <commctrl.h>
 #include <shellapi.h>
 #include <stdio.h>
 
@@ -9,6 +13,7 @@
 #define stringcopy strcpy
 #endif
 
+#define ID_LISTVIEW						8000
 #define ID_TRAY_APP_ICON                5000
 #define ID_TRAY_EXIT_CONTEXT_MENU_ITEM  3000
 #define WM_TRAYICON ( WM_USER + 1 )
@@ -39,7 +44,7 @@ LRESULT CALLBACK WndProc (HWND, UINT, WPARAM, LPARAM);
 void Minimize ()
 {
 	// add the icon to the system tray
-	Shell_NotifyIcon (NIM_ADD, & g_notifyIconData);
+	Shell_NotifyIcon (NIM_ADD, &g_notifyIconData);
 
 	// ..and hide the main window
 	ShowWindow (g_hwnd, SW_HIDE);
@@ -50,7 +55,7 @@ void Minimize ()
 void Restore ()
 {
 	// Remove the icon from the system tray
-	Shell_NotifyIcon (NIM_DELETE, & g_notifyIconData);
+	Shell_NotifyIcon (NIM_DELETE, &g_notifyIconData);
 
 	// ..and show the window
 	ShowWindow (g_hwnd, SW_SHOW);
@@ -61,7 +66,7 @@ void Restore ()
 // for details on the NOTIFYICONDATA structure.
 void InitNotifyIconData ()
 {
-	memset (& g_notifyIconData, 0, sizeof (NOTIFYICONDATA));
+	memset (&g_notifyIconData, 0, sizeof (NOTIFYICONDATA));
 
 	g_notifyIconData.cbSize = sizeof (NOTIFYICONDATA);
 
@@ -98,6 +103,8 @@ void InitNotifyIconData ()
 }
 #pragma endregion
 
+
+
 int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR args, int iCmdShow)
 {
 	TCHAR className[] = TEXT ("tray icon class");
@@ -113,14 +120,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR args, in
 	// would remain inaccessible!!
 	WM_TASKBARCREATED = RegisterWindowMessageA ("TaskbarCreated");
 
-#pragma region add a console
-	// add a console, because I love consoles.
-	// To disconnect the console, just comment out
-	// the next 3 lines of code.
-	//// AllocConsole();
-	//// AttachConsole( GetCurrentProcessId() ) ;
-	//// freopen( "CON", "w", stdout ) ;
-#pragma endregion
 
 #pragma region get window up
 	WNDCLASSEX wnd = { 0 };
@@ -131,46 +130,38 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR args, in
 	wnd.style = CS_HREDRAW | CS_VREDRAW;
 	wnd.cbSize = sizeof (WNDCLASSEX);
 
-	wnd.hIcon = LoadIcon (NULL, IDI_APPLICATION);
-	wnd.hIconSm = LoadIcon (NULL, IDI_APPLICATION);
+	wnd.hIcon = (HICON)LoadImage (NULL, TEXT ("icon.ico"), IMAGE_ICON, 0, 0, LR_LOADFROMFILE);
+	wnd.hIconSm = (HICON)LoadImage (NULL, TEXT ("icon.ico"), IMAGE_ICON, 0, 0, LR_LOADFROMFILE);
 	wnd.hCursor = LoadCursor (NULL, IDC_ARROW);
 	wnd.hbrBackground = (HBRUSH)COLOR_APPWORKSPACE;
 
-	if (!RegisterClassEx (& wnd))
+	if (!RegisterClassEx (&wnd))
 	{
 		FatalAppExit (0, TEXT ("Couldn't register window class!"));
 	}
 
 	g_hwnd = CreateWindowEx (
-
 		0, className,
-
 		TEXT ("Using the system tray"),
-		WS_OVERLAPPEDWINDOW,
-
+		(WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX),
 		CW_USEDEFAULT, CW_USEDEFAULT,
 		400, 400,
-
 		NULL, NULL,
 		hInstance, NULL
 	);
-
-	// Add the label with instruction text
-	CreateWindow (TEXT ("static"), TEXT ("right click the system tray icon to close"), WS_CHILD | WS_VISIBLE | SS_CENTER,
-		0, 0, 400, 400, g_hwnd, 0, hInstance, NULL);
 
 	// Initialize the NOTIFYICONDATA structure once
 	InitNotifyIconData ();
 
 
-	ShowWindow (g_hwnd, iCmdShow);
+	Minimize ();
 #pragma endregion
 
 	MSG msg;
-	while (GetMessage (& msg, NULL, 0, 0))
+	while (GetMessage (&msg, NULL, 0, 0))
 	{
-		TranslateMessage (& msg);
-		DispatchMessage (& msg);
+		TranslateMessage (&msg);
+		DispatchMessage (&msg);
 	}
 
 
@@ -178,11 +169,12 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR args, in
 	// clean up and remove the tray icon
 	if (!IsWindowVisible (g_hwnd))
 	{
-		Shell_NotifyIcon (NIM_DELETE, & g_notifyIconData);
+		Shell_NotifyIcon (NIM_DELETE, &g_notifyIconData);
 	}
 
 	return msg.wParam;
 }
+
 
 
 LRESULT CALLBACK WndProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -257,7 +249,7 @@ LRESULT CALLBACK WndProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 				// Get current mouse position.
 				POINT curPoint;
-				GetCursorPos (& curPoint);
+				GetCursorPos (&curPoint);
 
 				// should SetForegroundWindow according
 				// to original poster so the popup shows on top
@@ -324,3 +316,5 @@ LRESULT CALLBACK WndProc (HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 }
 
 
+
+#endif
