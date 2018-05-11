@@ -1,5 +1,3 @@
-#ifdef _LEARN
-
 #include <Windows.h>
 #include <winerror.h>
 #include "resource.h"
@@ -20,7 +18,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 			lpMMI->ptMinTrackSize.x = 300;
 			lpMMI->ptMinTrackSize.y = 300;
 			lpMMI->ptMaxTrackSize.x = 900;
-			lpMMI->ptMaxTrackSize.x = 700;
+			lpMMI->ptMaxTrackSize.y = 500;
 		}
 		break;
 		case WM_CREATE:
@@ -41,7 +39,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 			for (int b = 0; b < g_ColorCount; b++)
 			{
 				HWND hEdit = GetDlgItem (_hwnd, (IDC_BUTTON + b));
-				SetWindowPos (hEdit, NULL, 0, 0, rcClient.right, rcClient.bottom, SWP_NOZORDER);
+				SetWindowPos (hEdit, NULL, b*30, 0, 30, 30, SWP_NOZORDER);
 			}
 		}
 		break;
@@ -134,5 +132,3 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 	return 0;
 }
 
-
-#endif
