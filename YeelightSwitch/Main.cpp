@@ -7,6 +7,8 @@
 #define IDC_LIST   108
 
 const int g_ColorCount = 16;
+const int g_padding = 15;
+const COLORREF g_background = RGB (50, 50, 50);
 HINSTANCE g_hInstance = NULL;
 HWND g_list = NULL;
 
@@ -14,105 +16,50 @@ void PrintError (LPCTSTR _caption);
 
 LPCTSTR TryLoadString (UINT _id);
 
-HBITMAP ReplaceColor (HBITMAP hBmp, COLORREF cOldColor, COLORREF cNewColor, HDC hBmpDC)
+HICON CreateSolidColorIcon (COLORREF iconColor, int size)
 {
-#define COLORREF2RGB(Color) (Color & 0xff00) | ((Color >> 16) & 0xff) | ((Color << 16) & 0xff0000)
-	HBITMAP RetBmp = NULL;
-	if (hBmp)
-	{
-		HDC BufferDC = CreateCompatibleDC (NULL);    // DC for Source Bitmap
-		if (BufferDC)
-		{
-			HBITMAP hTmpBitmap = (HBITMAP)NULL;
-			if (hBmpDC)
-				if (hBmp == (HBITMAP)GetCurrentObject (hBmpDC, OBJ_BITMAP))
-				{
-					hTmpBitmap = CreateBitmap (1, 1, 1, 1, NULL);
-					SelectObject (hBmpDC, hTmpBitmap);
-				}
+	// Obtain a handle to the screen device context.
+	HDC hdcScreen = GetDC (NULL);
 
-			HGDIOBJ PreviousBufferObject = SelectObject (BufferDC, hBmp);
-			// here BufferDC contains the bitmap
+	// Create a memory device context, which we will draw into.
+	HDC hdcMem = CreateCompatibleDC (hdcScreen);
 
-			HDC DirectDC = CreateCompatibleDC (NULL); // DC for working
-			if (DirectDC)
-			{
-				// Get bitmap size
-				BITMAP bm;
-				GetObject (hBmp, sizeof (bm), &bm);
+	// Create the bitmap, and select it into the device context for drawing.
+	HBITMAP hbmp = CreateCompatibleBitmap (hdcScreen, size, size);
+	HBITMAP hbmpOld = (HBITMAP)SelectObject (hdcMem, hbmp);
+	// Draw your icon.
+	// 
+	// For this simple example, we're just drawing a solid color rectangle
+	// in the specified color with the specified dimensions.
+	HPEN hpen = CreatePen (PS_SOLID, 1, RGB (0, 0, 0));
+	HPEN hpenOld = (HPEN)SelectObject (hdcMem, hpen);
+	HBRUSH hbrush = CreateSolidBrush (iconColor);
+	HBRUSH hbrushOld = (HBRUSH)SelectObject (hdcMem, hbrush);
+	Ellipse (hdcMem, 0, 0, size, size);
+	SelectObject (hdcMem, hbrushOld);
+	SelectObject (hdcMem, hpenOld);
+	DeleteObject (hbrush);
+	DeleteObject (hpen);
 
-				// create a BITMAPINFO with minimal initilisation 
-				// for the CreateDIBSection
-				BITMAPINFO RGB32BitsBITMAPINFO;
-				ZeroMemory (&RGB32BitsBITMAPINFO, sizeof (BITMAPINFO));
-				RGB32BitsBITMAPINFO.bmiHeader.biSize = sizeof (BITMAPINFOHEADER);
-				RGB32BitsBITMAPINFO.bmiHeader.biWidth = bm.bmWidth;
-				RGB32BitsBITMAPINFO.bmiHeader.biHeight = bm.bmHeight;
-				RGB32BitsBITMAPINFO.bmiHeader.biPlanes = 1;
-				RGB32BitsBITMAPINFO.bmiHeader.biBitCount = 32;
-
-				// pointer used for direct Bitmap pixels access
-				UINT * ptPixels;
-
-				HBITMAP DirectBitmap = CreateDIBSection (DirectDC,
-					(BITMAPINFO *)&RGB32BitsBITMAPINFO,
-					DIB_RGB_COLORS,
-					(void **)&ptPixels,
-					NULL, 0);
-				if (DirectBitmap)
-				{
-					// here DirectBitmap!=NULL so ptPixels!=NULL no need to test
-					HGDIOBJ PreviousObject = SelectObject (DirectDC, DirectBitmap);
-					BitBlt (DirectDC, 0, 0,
-						bm.bmWidth, bm.bmHeight,
-						BufferDC, 0, 0, SRCCOPY);
-
-					// here the DirectDC contains the bitmap
-
-					// Convert COLORREF to RGB (Invert RED and BLUE)
-					cOldColor = COLORREF2RGB (cOldColor);
-					cNewColor = COLORREF2RGB (cNewColor);
-
-					// After all the inits we can do the job : Replace Color
-					for (int i = ((bm.bmWidth*bm.bmHeight) - 1); i >= 0; i--)
-					{
-						if (ptPixels[i] == cOldColor) ptPixels[i] = cNewColor;
-					}
-					// little clean up
-					// Don't delete the result of SelectObject because it's 
-					// our modified bitmap (DirectBitmap)
-					SelectObject (DirectDC, PreviousObject);
-
-					// finish
-					RetBmp = DirectBitmap;
-				}
-				// clean up
-				DeleteDC (DirectDC);
-			}
-			if (hTmpBitmap)
-			{
-				SelectObject (hBmpDC, hBmp);
-				DeleteObject (hTmpBitmap);
-			}
-			SelectObject (BufferDC, PreviousBufferObject);
-			// BufferDC is now useless
-			DeleteDC (BufferDC);
-		}
-	}
-	return RetBmp;
-}
-
-HICON CreateSolidColorIcon (COLORREF iconColor, HICON icon)
-{
-	ICONINFO resInfo;
-	GetIconInfo (icon, &resInfo);
-
+	// Create an icon from the bitmap.
+	// 
+	// Icons require masks to indicate transparent and opaque areas. Since this
+	// simple example has no transparent areas, we use a fully opaque mask.
+	HBITMAP hbmpMask = CreateCompatibleBitmap (hdcScreen, size, size);
 	ICONINFO ii;
 	ii.fIcon = TRUE;
-	ii.hbmMask = resInfo.hbmMask;
-	ii.hbmColor = ReplaceColor (resInfo.hbmColor, RGB (255, 255,255), iconColor, NULL);
+	ii.hbmMask = hbmpMask;
+	ii.hbmColor = hbmp;
 	HICON hIcon = CreateIconIndirect (&ii);
+	DeleteObject (hbmpMask);
 
+	// Clean-up.
+	SelectObject (hdcMem, hbmpOld);
+	DeleteObject (hbmp);
+	DeleteDC (hdcMem);
+	ReleaseDC (NULL, hdcScreen);
+
+	// Return the icon.
 	return hIcon;
 }
 
@@ -122,17 +69,14 @@ HWND CreateListView (HWND _parentHwnd)
 	icex.dwICC = ICC_LISTVIEW_CLASSES;
 	InitCommonControlsEx (&icex);
 
-	RECT rcClient;
-	GetClientRect (_parentHwnd, &rcClient);
-
 	HWND hWndListView = CreateWindowEx (
 		NULL,
 		WC_LISTVIEW,
 		NULL,
 		WS_CHILD | LVS_ICON | WS_VISIBLE | LVS_SINGLESEL,
 		0, 0,
-		rcClient.right - rcClient.left,
-		rcClient.bottom - rcClient.top,
+		0,
+		0,
 		_parentHwnd,
 		(HMENU)IDC_LIST,
 		g_hInstance,
@@ -145,7 +89,7 @@ HWND CreateListView (HWND _parentHwnd)
 	else
 	{
 
-		//ListView_SetBkColor (hWndListView, GetSysColor (COLOR_WINDOWFRAME));
+		ListView_SetBkColor (hWndListView, g_background);
 		HIMAGELIST hLargeIcons = ImageList_Create (GetSystemMetrics (SM_CXICON),
 			GetSystemMetrics (SM_CYICON),
 			ILC_COLOR32 | ILC_MASK, 1, 1);
@@ -153,8 +97,7 @@ HWND CreateListView (HWND _parentHwnd)
 			GetSystemMetrics (SM_CYSMICON),
 			ILC_COLOR32 | ILC_MASK, 1, 1);
 
-		HICON resIcon = LoadIcon (g_hInstance, MAKEINTRESOURCE (IDI_LV_ICON));
-		HICON hIcon = CreateSolidColorIcon (RGB (0, 255, 0), resIcon);
+		HICON hIcon = CreateSolidColorIcon (RGB (0, 255, 0), 32);
 		LVITEM lvi = { 0 };
 
 		lvi.mask = LVIF_TEXT | LVIF_IMAGE;
@@ -210,7 +153,8 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 			GetClientRect (_hwnd, &rcClient);
 			int w = rcClient.right - rcClient.left;
 			int h = rcClient.bottom - rcClient.top;
-			MoveWindow (g_list, 0, 0, w, h, 1);
+			int padding = g_padding;
+			MoveWindow (g_list, padding, padding, w - padding *2, h - padding *2, 1);
 			SendMessage (g_list, LVM_ARRANGE, LVA_ALIGNTOP, 0);
 		}
 		break;
@@ -230,10 +174,9 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 						return CDRF_NOTIFYITEMDRAW;
 					case CDDS_ITEMPREPAINT:
 						lplvcd->clrText = RGB (0, 0, 0);
-						lplvcd->clrTextBk = RGB (255, 0, 0);
+						lplvcd->clrTextBk = g_background;
 						return CDRF_NEWFONT;
 					case CDDS_SUBITEM | CDDS_ITEMPREPAINT:
-						lplvcd->clrTextBk = RGB (255, 0, 0);
 						return CDRF_NEWFONT;
 				}
 				return TRUE;
@@ -279,7 +222,7 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 		mainClass.hInstance = g_hInstance;
 		mainClass.hIcon = LoadIcon (g_hInstance, MAKEINTRESOURCE (IDI_ICON));
 		mainClass.hCursor = LoadCursor (NULL, IDC_ARROW);
-		mainClass.hbrBackground = (HBRUSH)COLOR_BACKGROUND;
+		mainClass.hbrBackground = (HBRUSH)CreateSolidBrush (g_background);
 		mainClass.lpszMenuName = NULL;
 		mainClass.lpszClassName = TEXT ("Main");
 		mainClassAtom = RegisterClass (&mainClass);

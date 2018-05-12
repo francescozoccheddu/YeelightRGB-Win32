@@ -8,7 +8,6 @@
 #define IDS_ERROR_CREATE_MAIN_WINDOW_CAPTION 105
 #define IDS_ERROR_MESSAGE_LOOP_CAPTION  106
 #define IDS_ERROR_CREATE_CHILD_WINDOW_CAPTION 107
-#define IDI_LV_ICON                     110
 
 // Next default values for new objects
 // 

@@ -161,7 +161,6 @@
     <ResourceCompile Include="Resource.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\..\..\..\..\Downloads\icon_lv.ico" />
     <Image Include="icon.ico" />
   </ItemGroup>
   <ItemGroup>
