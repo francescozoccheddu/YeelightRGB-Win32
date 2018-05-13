@@ -1,9 +1,11 @@
 #include "Configuration.h"
 
+#include <stdlib.h>
 #include <Windows.h>
-#include "resource.h"
 
 #define MAX_LINE_LENGTH 512
+
+#define INITIAL_STRING_SIZE 16
 
 typedef struct
 {
@@ -12,46 +14,112 @@ typedef struct
 	int endOfFile;
 } Buffer;
 
-void initBuf (Buffer * buffer)
+typedef enum
 {
-	buffer->pos = MAX_LINE_LENGTH;
-	buffer->endOfFile = -1;
+	BPR_OK, BPR_EOF, BPR_IOERR
+} BufferPopResult;
+
+void initBuf (Buffer * _buffer)
+{
+	_buffer->pos = MAX_LINE_LENGTH;
+	_buffer->endOfFile = -1;
 }
 
-BOOL ensureBufData (Buffer * buffer, HFILE file)
+BOOL updateBuffer (Buffer * _buffer, HFILE _file)
 {
-	if (buffer->pos == MAX_LINE_LENGTH || buffer->pos == MAX_LINE_LENGTH * 2)
+	if (_buffer->pos == MAX_LINE_LENGTH || _buffer->pos == MAX_LINE_LENGTH * 2)
 	{
-		int start = buffer->pos % (MAX_LINE_LENGTH * 2);
+		int start = _buffer->pos % (MAX_LINE_LENGTH * 2);
 		DWORD count;
-		BOOL result = ReadFile (file, buffer->buf + start, sizeof (TCHAR) * MAX_LINE_LENGTH, &count, NULL);
+		BOOL result = ReadFile (_file, _buffer->buf + start, sizeof (TCHAR) * MAX_LINE_LENGTH, &count, NULL);
 		count /= sizeof (TCHAR);
 		if (result)
 		{
-			buffer->pos = start;
+			_buffer->pos = start;
 			if (count < MAX_LINE_LENGTH)
 			{
-				buffer->endOfFile = start + count;
+				_buffer->endOfFile = start + count;
 			}
 		}
 		return result;
 	}
-}
-
-BOOL hasChar (Buffer * buffer)
-{
-	return buffer->pos != buffer->endOfFile;
-}
-
-BOOL popChar (Buffer * buffer, HFILE file, TCHAR * out)
-{
-	BOOL result = hasChar(buffer) && ensureBufData (buffer, file);
-	if (result)
+	else
 	{
-		*out = buffer->buf[buffer->pos];
-		buffer->pos++;
+		return TRUE;
 	}
-	return result;
+}
+
+BOOL hasChar (const Buffer * _buffer)
+{
+	return _buffer->pos != _buffer->endOfFile;
+}
+
+BufferPopResult popChar (Buffer * _buffer, HFILE _file, TCHAR * _out)
+{
+	if (!hasChar (_buffer))
+	{
+		return BPR_EOF;
+	}
+
+	if (!updateBuffer (_buffer, _file))
+	{
+		return BPR_IOERR;
+	}
+
+	if (!hasChar (_buffer))
+	{
+		return BPR_EOF;
+	}
+
+	*_out = _buffer->buf[_buffer->pos];
+	_buffer->pos++;
+	return BPR_OK;
+}
+
+typedef struct
+{
+	TCHAR * buf;
+	int size;
+	int pos;
+} String;
+
+String makeString (void)
+{
+	String str;
+	str.buf = NULL;
+	str.size = 0;
+	str.pos = 0;
+	return str;
+}
+
+BOOL resizeString (String * _str, int _size)
+{
+	_str->buf = realloc (_str->buf, sizeof (TCHAR) * _size);
+	
+	if (!_str->buf && _size != 0)
+	{
+		return FALSE;
+	}
+
+	_str->size = _size;
+	return TRUE;
+}
+
+void appendToString (String * _str, TCHAR _ch)
+{
+	if (_str->pos == _str->size)
+	{
+		int newSize = _str->size == 0 ? INITIAL_STRING_SIZE : _str->size * 2;
+		resizeString (_str, newSize);
+	}
+	_str->buf[_str->pos++] = _ch;
+}
+
+LPCTSTR finalizeString (String * _str)
+{
+	resizeString (_str, _str->pos + 1);
+	_str->buf[_str->pos++] = (TCHAR) '\0';
+	return _str->buf;
 }
 
 BOOL loadConfiguration (LPCTSTR _filename, Configuration * _out)
@@ -59,17 +127,16 @@ BOOL loadConfiguration (LPCTSTR _filename, Configuration * _out)
 	HFILE file = CreateFile (_filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 	if (file != INVALID_HANDLE_VALUE)
 	{
-		TCHAR * bulbId = malloc (sizeof (*_out->bulbId) * 32);
-		Buffer buffer;
-		initBuf (&buffer);
-		int i = 0;
-		while (i < 31 && hasChar (&buffer))
+		Buffer buf;
+		initBuf (&buf);
+		String str = makeString ();
+		while (hasChar (&buf))
 		{
-			popChar (&buffer, file, bulbId + i);
-			i++;
+			TCHAR ch;
+			popChar (&buf, file, &ch);
+			appendToString (&str, ch);
 		}
-		bulbId[i] = '\0';
-		_out->bulbId = bulbId;
+		_out->bulbId = finalizeString (&str);
 		return TRUE;
 	}
 	else
