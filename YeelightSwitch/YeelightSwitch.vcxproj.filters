@@ -18,6 +18,12 @@
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Configuration.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Utils.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Resource.rc">
@@ -30,7 +36,13 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Main.cpp">
+    <ClCompile Include="Main.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Configuration.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Utils.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

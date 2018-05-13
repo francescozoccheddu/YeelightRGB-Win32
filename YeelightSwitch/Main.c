@@ -2,6 +2,8 @@
 #include <CommCtrl.h>
 #include "resource.h"
 
+#include "Configuration.h"
+
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 #define IDC_LIST   108
@@ -115,7 +117,7 @@ HWND CreateListView (HWND _parentHwnd)
 		//add some items to the the list view common control
 
 		//flags to determine what information is to be set
-		TCHAR chBuffer[16] = TEXT ("DIO");
+		TCHAR chBuffer[16] = TEXT ("Test");
 		for (i = 0; i < 4; ++i)
 		{
 			lvi.iItem = i;                     //the zero-based item index 
@@ -243,6 +245,10 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 
 	ShowWindow (window, _cmdShow);
 	UpdateWindow (window);
+	
+	Configuration conf;
+	loadConfiguration (TEXT("C:/Users/zocch/Desktop/hello.txt"), &conf);
+	MessageBox (window, conf.bulbId, TEXT("ID"), MB_OK);
 
 	MSG msg;
 	BOOL bRes;
