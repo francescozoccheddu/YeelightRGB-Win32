@@ -5,11 +5,9 @@
 
 #define MAX_LINE_LENGTH 512
 
-typedef TCHAR Character;
-
 typedef struct
 {
-	Character buf[MAX_LINE_LENGTH * 2];
+	TCHAR buf[MAX_LINE_LENGTH * 2];
 	int pos;
 	int endOfFile;
 } Buffer;
@@ -22,15 +20,16 @@ void initBuf (Buffer * buffer)
 
 BOOL ensureBufData (Buffer * buffer, HFILE file)
 {
-	if (buffer->pos == MAX_LINE_LENGTH || buffer->pos == MAX_LINE_LENGTH / 2)
+	if (buffer->pos == MAX_LINE_LENGTH || buffer->pos == MAX_LINE_LENGTH * 2)
 	{
-		int start = buffer->pos % MAX_LINE_LENGTH;
+		int start = buffer->pos % (MAX_LINE_LENGTH * 2);
 		DWORD count;
-		BOOL result = ReadFile (file, buffer->buf, sizeof (Character) * MAX_LINE_LENGTH / 2, &count, NULL);
+		BOOL result = ReadFile (file, buffer->buf + start, sizeof (TCHAR) * MAX_LINE_LENGTH, &count, NULL);
+		count /= sizeof (TCHAR);
 		if (result)
 		{
 			buffer->pos = start;
-			if (count < MAX_LINE_LENGTH / 2)
+			if (count < MAX_LINE_LENGTH)
 			{
 				buffer->endOfFile = start + count;
 			}
@@ -44,7 +43,7 @@ BOOL hasChar (Buffer * buffer)
 	return buffer->pos != buffer->endOfFile;
 }
 
-BOOL popChar (Buffer * buffer, HFILE file, Character * out)
+BOOL popChar (Buffer * buffer, HFILE file, TCHAR * out)
 {
 	BOOL result = hasChar(buffer) && ensureBufData (buffer, file);
 	if (result)
@@ -60,7 +59,7 @@ BOOL loadConfiguration (LPCTSTR _filename, Configuration * _out)
 	HFILE file = CreateFile (_filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 	if (file != INVALID_HANDLE_VALUE)
 	{
-		Character * bulbId = malloc (sizeof (*_out->bulbId) * 32);
+		TCHAR * bulbId = malloc (sizeof (*_out->bulbId) * 32);
 		Buffer buffer;
 		initBuf (&buffer);
 		int i = 0;
