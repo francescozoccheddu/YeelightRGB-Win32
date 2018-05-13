@@ -248,7 +248,6 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 	
 	Configuration conf;
 	loadConfiguration (TEXT("C:/Users/zocch/Desktop/hello.txt"), &conf);
-	MessageBox (window, conf.bulbId, TEXT("ID"), MB_OK);
 
 	MSG msg;
 	BOOL bRes;

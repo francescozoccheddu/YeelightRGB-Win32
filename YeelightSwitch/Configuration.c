@@ -3,123 +3,330 @@
 #include <stdlib.h>
 #include <Windows.h>
 
-#define MAX_LINE_LENGTH 512
+#define BUF_SIZE 512
 
 #define INITIAL_STRING_SIZE 16
 
+#define BOM 65279
+
+#define PREFIX_BULB_ID '?'
+#define PREFIX_ADDRESS '@'
+#define PREFIX_PORT ':'
+#define PREFIX_COLOR '#'
+#define PREFIX_COLORNAME '"'
+#define SUFFIX_COLORNAME '"'
+
+#define MUST(x) {if (!(x)) { return FALSE; }}
+
 typedef struct
 {
-	TCHAR buf[MAX_LINE_LENGTH * 2];
+	TCHAR buf[BUF_SIZE * 2];
 	int pos;
 	int endOfFile;
-} Buffer;
+	DWORD error;
+	int line;
+	int column;
+	HFILE file;
+} FileReader;
 
-typedef enum
+void fillBuffer (FileReader * _fr)
 {
-	BPR_OK, BPR_EOF, BPR_IOERR
-} BufferPopResult;
-
-void initBuf (Buffer * _buffer)
-{
-	_buffer->pos = MAX_LINE_LENGTH;
-	_buffer->endOfFile = -1;
-}
-
-BOOL updateBuffer (Buffer * _buffer, HFILE _file)
-{
-	if (_buffer->pos == MAX_LINE_LENGTH || _buffer->pos == MAX_LINE_LENGTH * 2)
+	DWORD count;
+	BOOL result = ReadFile (_fr->file, _fr->buf, sizeof (TCHAR) * BUF_SIZE, &count, NULL);
+	count /= sizeof (TCHAR);
+	if (result)
 	{
-		int start = _buffer->pos % (MAX_LINE_LENGTH * 2);
-		DWORD count;
-		BOOL result = ReadFile (_file, _buffer->buf + start, sizeof (TCHAR) * MAX_LINE_LENGTH, &count, NULL);
-		count /= sizeof (TCHAR);
-		if (result)
-		{
-			_buffer->pos = start;
-			if (count < MAX_LINE_LENGTH)
-			{
-				_buffer->endOfFile = start + count;
-			}
-		}
-		return result;
+		_fr->pos = 0;
+		_fr->endOfFile = count;
 	}
 	else
 	{
-		return TRUE;
+		_fr->endOfFile = _fr->pos;
+		_fr->error = GetLastError ();
 	}
 }
 
-BOOL hasChar (const Buffer * _buffer)
+void makeFileReader (FileReader * _fr, HFILE _file)
 {
-	return _buffer->pos != _buffer->endOfFile;
+	_fr->pos = 0;
+	_fr->endOfFile = 0;
+	_fr->error = 0;
+	_fr->line = 0;
+	_fr->column = 0;
+	_fr->file = _file;
+	fillBuffer (_fr);
 }
 
-BufferPopResult popChar (Buffer * _buffer, HFILE _file, TCHAR * _out)
+BOOL hasChar (const FileReader * _fr)
 {
-	if (!hasChar (_buffer))
-	{
-		return BPR_EOF;
-	}
+	return _fr->pos != _fr->endOfFile;
+}
 
-	if (!updateBuffer (_buffer, _file))
-	{
-		return BPR_IOERR;
-	}
+TCHAR peekChar (const FileReader * _fr)
+{
+	return _fr->buf[_fr->pos];
+}
 
-	if (!hasChar (_buffer))
+void skipChar (FileReader * _fr)
+{
+	if (peekChar (_fr) == '\n')
 	{
-		return BPR_EOF;
+		_fr->line++;
+		_fr->column = 0;
 	}
-
-	*_out = _buffer->buf[_buffer->pos];
-	_buffer->pos++;
-	return BPR_OK;
+	else
+	{
+		_fr->column++;
+	}
+	_fr->pos++;
+	if (_fr->pos >= BUF_SIZE)
+	{
+		return fillBuffer (_fr);
+	}
 }
 
 typedef struct
 {
-	TCHAR * buf;
+	char * buf;
+	int itemSize;
 	int size;
 	int pos;
-} String;
+} Vector;
 
-String makeString (void)
+Vector makeVector (int _itemSize)
 {
-	String str;
+	Vector str;
 	str.buf = NULL;
+	str.itemSize = _itemSize;
 	str.size = 0;
 	str.pos = 0;
 	return str;
 }
 
-BOOL resizeString (String * _str, int _size)
+Vector makeString (void)
 {
-	_str->buf = realloc (_str->buf, sizeof (TCHAR) * _size);
-	
-	if (!_str->buf && _size != 0)
+	return makeVector (sizeof (TCHAR));
+}
+
+BOOL resizeVector (Vector * _vec, int _size)
+{
+	_vec->buf = realloc (_vec->buf, _vec->itemSize * _size);
+
+	if (!_vec->buf && _size != 0)
 	{
 		return FALSE;
 	}
 
-	_str->size = _size;
+	_vec->size = _size;
 	return TRUE;
 }
 
-void appendToString (String * _str, TCHAR _ch)
+void appendToVector (Vector * _vec, const char * _el)
 {
-	if (_str->pos == _str->size)
+	if (_vec->pos == _vec->size)
 	{
-		int newSize = _str->size == 0 ? INITIAL_STRING_SIZE : _str->size * 2;
-		resizeString (_str, newSize);
+		int newSize = _vec->size == 0 ? INITIAL_STRING_SIZE : _vec->size * 2;
+		resizeVector (_vec, newSize);
 	}
-	_str->buf[_str->pos++] = _ch;
+	int dataLeft = _vec->itemSize;
+	while (dataLeft-- > 0)
+	{
+		_vec->buf[_vec->pos * _vec->itemSize + dataLeft] = _el[dataLeft];
+	}
 }
 
-LPCTSTR finalizeString (String * _str)
+void appendToString (Vector * _str, TCHAR _ch)
 {
-	resizeString (_str, _str->pos + 1);
+	appendToVector (_str, &_ch);
+}
+
+LPCTSTR finalizeString (Vector * _str)
+{
+	resizeVector (_str, _str->pos + 1);
 	_str->buf[_str->pos++] = (TCHAR) '\0';
 	return _str->buf;
+}
+
+BOOL isNumeric (TCHAR _ch)
+{
+	return _ch >= '0' && _ch <= '9';
+}
+
+BOOL intCharToInt (TCHAR _ch, int * _out)
+{
+	if (isNumeric (_ch))
+	{
+		*_out = _ch - '0';
+		return TRUE;
+	}
+	else
+	{
+		return FALSE;
+	}
+}
+
+BOOL hexCharToInt (TCHAR _ch, int *_out)
+{
+	if (intCharToInt (_ch, _out))
+	{
+		return TRUE;
+	}
+	else
+	{
+		switch (_ch)
+		{
+			case 'A':
+			case 'a':
+				*_out = 10;
+				return TRUE;
+			case 'B':
+			case 'b':
+				*_out = 11;
+				return TRUE;
+			case 'C':
+			case 'c':
+				*_out = 12;
+				return TRUE;
+			case 'D':
+			case 'd':
+				*_out = 13;
+				return TRUE;
+			case 'E':
+			case 'e':
+				*_out = 14;
+				return TRUE;
+			case 'F':
+			case 'f':
+				*_out = 15;
+				return TRUE;
+			default:
+				return FALSE;
+		}
+	}
+}
+
+BOOL readDecInt (FileReader * _fr, DWORD64 * _out)
+{
+	DWORD64 val = 0;
+	BOOL ok = FALSE;
+	while (hasChar (_fr))
+	{
+		TCHAR ch = peekChar (_fr);
+		int dig;
+		if (intCharToInt (ch, &dig))
+		{
+			ok = TRUE;
+			val *= 10;
+			val += dig;
+			skipChar (_fr);
+		}
+		else
+		{
+			if (ok)
+			{
+				*_out = val;
+			}
+			return ok;
+		}
+	}
+}
+
+BOOL readHexInt (FileReader * _fr, DWORD64 * _out)
+{
+	DWORD64 val = 0;
+	BOOL ok = FALSE;
+	while (hasChar (_fr))
+	{
+		TCHAR ch = peekChar (_fr);
+		int dig;
+		if (hexCharToInt (ch, &dig))
+		{
+			ok = TRUE;
+			val <<= 4;
+			val |= dig;
+			skipChar (_fr);
+		}
+		else
+		{
+			if (ok)
+			{
+				*_out = val;
+			}
+			return ok;
+		}
+	}
+}
+
+BOOL readHexOrDecInt (FileReader * _fr, DWORD64 * _out)
+{
+	if (hasChar (_fr) && peekChar (_fr) == (TCHAR) '0')
+	{
+		skipChar (_fr);
+		if (hasChar (_fr) && peekChar (_fr) == (TCHAR) 'x')
+		{
+			skipChar (_fr);
+			return readHexInt (_fr, _out);
+		}
+	}
+	return readDecInt (_fr, _out);
+}
+
+BOOL shouldIgnore (TCHAR _ch)
+{
+	switch (_ch)
+	{
+		case BOM:
+		case ' ':
+		case '\n':
+		case '\r':
+		case '\t':
+		case '\h':
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+BOOL ignoreSpace (FileReader * _fr)
+{
+	BOOL ignored = FALSE;
+	while (hasChar (_fr) && shouldIgnore (peekChar (_fr)))
+	{
+		ignored = TRUE;
+		skipChar (_fr);
+	}
+	return ignored;
+}
+
+BOOL consumeChar (FileReader * _fr, TCHAR _ch)
+{
+	if (hasChar (_fr) && peekChar (_fr) == _ch)
+	{
+		skipChar (_fr);
+		return TRUE;
+	}
+	else
+	{
+		return FALSE;
+	}
+}
+
+BOOL parseConfiguration (FileReader * _fr, Configuration * _out)
+{
+	Configuration conf;
+	ignoreSpace (_fr);
+	MUST (consumeChar (_fr, PREFIX_BULB_ID));
+	MUST (readHexOrDecInt (_fr, &conf.bulbId));
+	ignoreSpace (_fr);
+	MUST (consumeChar (_fr, PREFIX_ADDRESS));
+	for (int f = 0; f < 4; f++)
+	{
+		MUST (readDecInt (_fr, &conf.address[f]));
+		MUST (consumeChar (_fr, '.'));
+	}
+	MUST (consumeChar (_fr, PREFIX_PORT));
+	MUST (readDecInt (_fr, &conf.port));
+	ignoreSpace (_fr);
 }
 
 BOOL loadConfiguration (LPCTSTR _filename, Configuration * _out)
@@ -127,16 +334,9 @@ BOOL loadConfiguration (LPCTSTR _filename, Configuration * _out)
 	HFILE file = CreateFile (_filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 	if (file != INVALID_HANDLE_VALUE)
 	{
-		Buffer buf;
-		initBuf (&buf);
-		String str = makeString ();
-		while (hasChar (&buf))
-		{
-			TCHAR ch;
-			popChar (&buf, file, &ch);
-			appendToString (&str, ch);
-		}
-		_out->bulbId = finalizeString (&str);
+		FileReader buf;
+		makeFileReader (&buf, file);
+		CloseHandle (file);
 		return TRUE;
 	}
 	else

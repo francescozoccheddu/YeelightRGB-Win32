@@ -4,7 +4,9 @@
 
 typedef struct
 {
-	LPCTSTR bulbId;
+	DWORD64 bulbId;
+	int address[4];
+	int port;
 	const COLORREF * colors;
 	int colCount;
 } Configuration;
