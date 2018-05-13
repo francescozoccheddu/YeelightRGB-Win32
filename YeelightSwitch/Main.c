@@ -247,7 +247,7 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 	UpdateWindow (window);
 	
 	conf_T conf;
-	conf_Load (TEXT("C:/Users/zocch/Desktop/hello.txt"), &conf);
+	conf_Result_T confRes = conf_Load (TEXT("C:/Users/zocch/Desktop/hello.txt"), &conf);
 
 	MSG msg;
 	BOOL bRes;

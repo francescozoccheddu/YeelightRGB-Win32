@@ -80,7 +80,8 @@ void vec_Destroy (vec_T * _vec)
 	_vec->pos = 0;
 }
 
-int vec_GetSize (const vec_T * _vec)
+void vec_FreeBuf (void * _buf)
 {
-	return _vec->pos;
+	free (_buf);
 }
+

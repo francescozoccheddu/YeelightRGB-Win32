@@ -1,38 +1,36 @@
 #include "Configuration.h"
 
-#include <stdlib.h>
 #include <Windows.h>
 
 #include "Vector.h"
 
-#define BUF_SIZE 512
+#define _conf_FR_BUF_SIZE 512
 
-#define BOM 65279
+#define _conf_CH_BOM 65279
 
-#define PREFIX_BULB_ID '?'
-#define PREFIX_ADDRESS '@'
-#define PREFIX_PORT ':'
-#define PREFIX_COLOR '#'
-#define PREFIX_COLORNAME '"'
-#define SUFFIX_COLORNAME '"'
+#define _conf_CH_PREFIX_BULB_ID '?'
+#define _conf_CH_PREFIX_ADDRESS '@'
+#define _conf_CH_PREFIX_PORT ':'
+#define _conf_CH_PREFIX_COLOR '#'
+#define _conf_CH_PREFIX_COLORNAME '"'
+#define _conf_CH_SUFFIX_COLORNAME '"'
 
-#define MUST(x) {if (!(x)) { return FALSE; }}
+#define _conf_MUST(x) {if (!(x)) { return FALSE; }}
 
 typedef struct
 {
-	TCHAR buf[BUF_SIZE * 2];
+	TCHAR buf[_conf_FR_BUF_SIZE * 2];
 	int pos;
 	int endOfFile;
 	DWORD error;
-	int line;
-	int column;
+	conf_FilePos_T filePos;
 	HANDLE file;
-} FileReader;
+} _conf_FileReader_T;
 
-void fillBuffer (FileReader * _fr)
+void _conf_FileReader_Fill (_conf_FileReader_T * _fr)
 {
 	DWORD count;
-	BOOL result = ReadFile (_fr->file, _fr->buf, sizeof (TCHAR) * BUF_SIZE, &count, NULL);
+	BOOL result = ReadFile (_fr->file, _fr->buf, sizeof (TCHAR) * _conf_FR_BUF_SIZE, &count, NULL);
 	count /= sizeof (TCHAR);
 	if (result)
 	{
@@ -46,53 +44,53 @@ void fillBuffer (FileReader * _fr)
 	}
 }
 
-void makeFileReader (FileReader * _fr, HANDLE _file)
+void conf_FileReader_Make (_conf_FileReader_T * _fr, HANDLE _file)
 {
 	_fr->pos = 0;
 	_fr->endOfFile = 0;
 	_fr->error = 0;
-	_fr->line = 0;
-	_fr->column = 0;
+	_fr->filePos.line = 0;
+	_fr->filePos.column = 0;
 	_fr->file = _file;
-	fillBuffer (_fr);
+	_conf_FileReader_Fill (_fr);
 }
 
-BOOL hasChar (const FileReader * _fr)
+BOOL _conf_FileReader_HasChar (const _conf_FileReader_T * _fr)
 {
 	return _fr->pos != _fr->endOfFile;
 }
 
-TCHAR peekChar (const FileReader * _fr)
+TCHAR _conf_FileReader_Peek (const _conf_FileReader_T * _fr)
 {
 	return _fr->buf[_fr->pos];
 }
 
-void skipChar (FileReader * _fr)
+void _conf_FileReader_Next (_conf_FileReader_T * _fr)
 {
-	if (peekChar (_fr) == '\n')
+	if (_conf_FileReader_Peek (_fr) == '\n')
 	{
-		_fr->line++;
-		_fr->column = 0;
+		_fr->filePos.line++;
+		_fr->filePos.column = 0;
 	}
 	else
 	{
-		_fr->column++;
+		_fr->filePos.column++;
 	}
 	_fr->pos++;
-	if (_fr->pos >= BUF_SIZE)
+	if (_fr->pos >= _conf_FR_BUF_SIZE)
 	{
-		fillBuffer (_fr);
+		_conf_FileReader_Fill (_fr);
 	}
 }
 
-BOOL isNumeric (TCHAR _ch)
+BOOL _conf_IsChNumeric (TCHAR _ch)
 {
 	return _ch >= '0' && _ch <= '9';
 }
 
-BOOL intCharToInt (TCHAR _ch, int * _out)
+BOOL _conf_DecChToInt (TCHAR _ch, int * _out)
 {
-	if (isNumeric (_ch))
+	if (_conf_IsChNumeric (_ch))
 	{
 		*_out = _ch - '0';
 		return TRUE;
@@ -103,9 +101,9 @@ BOOL intCharToInt (TCHAR _ch, int * _out)
 	}
 }
 
-BOOL hexCharToInt (TCHAR _ch, int *_out)
+BOOL _conf_HexChToInt (TCHAR _ch, int *_out)
 {
-	if (intCharToInt (_ch, _out))
+	if (_conf_DecChToInt (_ch, _out))
 	{
 		return TRUE;
 	}
@@ -143,20 +141,20 @@ BOOL hexCharToInt (TCHAR _ch, int *_out)
 	}
 }
 
-BOOL readDecInt (FileReader * _fr, DWORD64 * _out)
+BOOL _conf_ParseDecInt (_conf_FileReader_T * _fr, DWORD64 * _out)
 {
 	DWORD64 val = 0;
 	BOOL ok = FALSE;
-	while (hasChar (_fr))
+	while (_conf_FileReader_HasChar (_fr))
 	{
-		TCHAR ch = peekChar (_fr);
+		TCHAR ch = _conf_FileReader_Peek (_fr);
 		int dig;
-		if (intCharToInt (ch, &dig))
+		if (_conf_DecChToInt (ch, &dig))
 		{
 			ok = TRUE;
 			val *= 10;
 			val += dig;
-			skipChar (_fr);
+			_conf_FileReader_Next (_fr);
 		}
 		else
 		{
@@ -170,20 +168,20 @@ BOOL readDecInt (FileReader * _fr, DWORD64 * _out)
 	return ok;
 }
 
-BOOL readHexInt (FileReader * _fr, DWORD64 * _out)
+BOOL _conf_ParseHexInt (_conf_FileReader_T * _fr, DWORD64 * _out)
 {
 	DWORD64 val = 0;
 	BOOL ok = FALSE;
-	while (hasChar (_fr))
+	while (_conf_FileReader_HasChar (_fr))
 	{
-		TCHAR ch = peekChar (_fr);
+		TCHAR ch = _conf_FileReader_Peek (_fr);
 		int dig;
-		if (hexCharToInt (ch, &dig))
+		if (_conf_HexChToInt (ch, &dig))
 		{
 			ok = TRUE;
 			val <<= 4;
 			val |= dig;
-			skipChar (_fr);
+			_conf_FileReader_Next (_fr);
 		}
 		else
 		{
@@ -197,25 +195,25 @@ BOOL readHexInt (FileReader * _fr, DWORD64 * _out)
 	return ok;
 }
 
-BOOL readHexOrDecInt (FileReader * _fr, DWORD64 * _out)
+BOOL _conf_ParseHexOrDecInt (_conf_FileReader_T * _fr, DWORD64 * _out)
 {
-	if (hasChar (_fr) && peekChar (_fr) == (TCHAR) '0')
+	if (_conf_FileReader_HasChar (_fr) && _conf_FileReader_Peek (_fr) == (TCHAR) '0')
 	{
-		skipChar (_fr);
-		if (hasChar (_fr) && peekChar (_fr) == (TCHAR) 'x')
+		_conf_FileReader_Next (_fr);
+		if (_conf_FileReader_HasChar (_fr) && _conf_FileReader_Peek (_fr) == (TCHAR) 'x')
 		{
-			skipChar (_fr);
-			return readHexInt (_fr, _out);
+			_conf_FileReader_Next (_fr);
+			return _conf_ParseHexInt (_fr, _out);
 		}
 	}
-	return readDecInt (_fr, _out);
+	return _conf_ParseDecInt (_fr, _out);
 }
 
-BOOL shouldIgnore (TCHAR _ch)
+BOOL _conf_ch_ShouldIgnore (TCHAR _ch)
 {
 	switch (_ch)
 	{
-		case BOM:
+		case _conf_CH_BOM:
 		case ' ':
 		case '\n':
 		case '\r':
@@ -226,22 +224,22 @@ BOOL shouldIgnore (TCHAR _ch)
 	}
 }
 
-BOOL ignoreSpace (FileReader * _fr)
+BOOL _conf_IgnoreSpace (_conf_FileReader_T * _fr)
 {
 	BOOL ignored = FALSE;
-	while (hasChar (_fr) && shouldIgnore (peekChar (_fr)))
+	while (_conf_FileReader_HasChar (_fr) && _conf_ch_ShouldIgnore (_conf_FileReader_Peek (_fr)))
 	{
 		ignored = TRUE;
-		skipChar (_fr);
+		_conf_FileReader_Next (_fr);
 	}
 	return ignored;
 }
 
-BOOL consumeChar (FileReader * _fr, TCHAR _ch)
+BOOL _conf_ConsumeChar (_conf_FileReader_T * _fr, TCHAR _ch)
 {
-	if (hasChar (_fr) && peekChar (_fr) == _ch)
+	if (_conf_FileReader_HasChar (_fr) && _conf_FileReader_Peek (_fr) == _ch)
 	{
-		skipChar (_fr);
+		_conf_FileReader_Next (_fr);
 		return TRUE;
 	}
 	else
@@ -250,7 +248,7 @@ BOOL consumeChar (FileReader * _fr, TCHAR _ch)
 	}
 }
 
-BOOL makePreset (DWORD64 _color, LPTSTR _name, conf_Preset_T * _out)
+BOOL _conf_Preset_Make (DWORD64 _color, LPTSTR _name, conf_Preset_T * _out)
 {
 	if (_color & (((1 << 16) - 1) << 16))
 	{
@@ -261,51 +259,51 @@ BOOL makePreset (DWORD64 _color, LPTSTR _name, conf_Preset_T * _out)
 	return TRUE;
 }
 
-BOOL parseConfiguration (FileReader * _fr, conf_T * _out)
+BOOL _conf_Parse (_conf_FileReader_T * _fr, conf_T * _out)
 {
 	conf_T conf;
-	ignoreSpace (_fr);
+	_conf_IgnoreSpace (_fr);
 	{
-		MUST (consumeChar (_fr, PREFIX_BULB_ID));
-		MUST (readHexOrDecInt (_fr, &conf.bulbId));
+		_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_BULB_ID));
+		_conf_MUST (_conf_ParseHexOrDecInt (_fr, &conf.bulbId));
 	}
-	ignoreSpace (_fr);
+	_conf_IgnoreSpace (_fr);
 	{
-		MUST (consumeChar (_fr, PREFIX_ADDRESS));
+		_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_ADDRESS));
 		int fields[4];
 		for (int f = 0; f < 4; f++)
 		{
 			DWORD64 field;
 			if (f > 0)
 			{
-				MUST (consumeChar (_fr, '.'));
+				_conf_MUST (_conf_ConsumeChar (_fr, '.'));
 			}
-			MUST (readDecInt (_fr, &field));
+			_conf_MUST (_conf_ParseDecInt (_fr, &field));
 			fields[f] = (int)field;
 		}
-		MUST (consumeChar (_fr, PREFIX_PORT));
+		_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_PORT));
 		DWORD64 port;
-		MUST (readDecInt (_fr, &port));
+		_conf_MUST (_conf_ParseDecInt (_fr, &port));
 		// TODO make address
 	}
-	ignoreSpace (_fr);
+	_conf_IgnoreSpace (_fr);
 	{
 		vec_T presetBuf = vec_Make (sizeof (conf_Preset_T));
-		while (hasChar (_fr))
+		while (_conf_FileReader_HasChar (_fr))
 		{
-			MUST (consumeChar (_fr, PREFIX_COLOR));
+			_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_COLOR));
 			DWORD64 color;
-			MUST (readHexInt (_fr, &color));
-			ignoreSpace (_fr);
-			MUST (consumeChar (_fr, PREFIX_COLORNAME));
+			_conf_MUST (_conf_ParseHexInt (_fr, &color));
+			_conf_IgnoreSpace (_fr);
+			_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_COLORNAME));
 			vec_T nameBuf = vec_Make (sizeof (TCHAR));
-			while (hasChar (_fr))
+			while (_conf_FileReader_HasChar (_fr))
 			{
-				TCHAR ch = peekChar (_fr);
-				if (peekChar (_fr) != SUFFIX_COLORNAME)
+				TCHAR ch = _conf_FileReader_Peek (_fr);
+				if (_conf_FileReader_Peek (_fr) != _conf_CH_SUFFIX_COLORNAME)
 				{
 					vec_Append (&nameBuf, &ch);
-					skipChar (_fr);
+					_conf_FileReader_Next (_fr);
 				}
 				else
 				{
@@ -313,10 +311,10 @@ BOOL parseConfiguration (FileReader * _fr, conf_T * _out)
 				}
 			}
 			LPTSTR name = vec_FinalizeAsString (&nameBuf);
-			MUST (consumeChar (_fr, SUFFIX_COLORNAME));
-			ignoreSpace (_fr);
+			_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_SUFFIX_COLORNAME));
+			_conf_IgnoreSpace (_fr);
 			conf_Preset_T preset;
-			MUST (makePreset (color, name, &preset));
+			_conf_MUST (_conf_Preset_Make (color, name, &preset));
 			vec_Append (&presetBuf, &preset);
 		}
 		conf.presetCount = presetBuf.pos;
@@ -332,21 +330,40 @@ void conf_Preset_Destroy (conf_Preset_T * _preset)
 	_preset->name = NULL;
 }
 
-BOOL conf_Load (LPCTSTR _filename, conf_T * _out)
+conf_Result_T conf_Load (LPCTSTR _filename, conf_T * _out)
 {
+	conf_Result_T res;
 	HANDLE file = CreateFile (_filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 	if (file != INVALID_HANDLE_VALUE)
 	{
-		FileReader fr;
-		makeFileReader (&fr, file);
-		BOOL res = parseConfiguration (&fr, _out);
+		_conf_FileReader_T fr;
+		conf_FileReader_Make (&fr, file);
+		BOOL parseRes = _conf_Parse (&fr, _out);
 		CloseHandle (file);
-		return res;
+		if (parseRes)
+		{
+			res.code = conf_RC_OK;
+		}
+		else
+		{
+			if (fr.error)
+			{
+				res.code = conf_RC_IOERR;
+				res.data.ioErr = fr.error;
+			}
+			else
+			{
+				res.code = conf_RC_FORMERR;
+				res.data.lastFilePos = fr.filePos;
+			}
+		}
 	}
 	else
 	{
-		return FALSE;
+		res.code = conf_RC_IOERR;
+		res.data.ioErr = GetLastError ();
 	}
+	return res;
 }
 
 void conf_Destroy (conf_T * _conf)
@@ -356,6 +373,6 @@ void conf_Destroy (conf_T * _conf)
 	{
 		conf_Preset_Destroy (&_conf->presets[p]);
 	}
-	free (_conf->presets);
+	vec_FreeBuf (_conf->presets);
 	_conf->presets = NULL;
 }

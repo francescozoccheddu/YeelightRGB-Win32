@@ -12,12 +12,33 @@ void conf_Preset_Destroy (conf_Preset_T * preset);
 
 typedef struct
 {
+	int line;
+	int column;
+} conf_FilePos_T;
+
+typedef enum
+{
+	conf_RC_OK, conf_RC_IOERR, conf_RC_FORMERR
+} conf_Result_Code_T;
+
+typedef struct
+{
+	conf_Result_Code_T code;
+	union
+	{
+		conf_FilePos_T lastFilePos;
+		DWORD ioErr;
+	} data;
+} conf_Result_T;
+
+typedef struct
+{
 	DWORD64 bulbId;
 	int port;
 	conf_Preset_T * presets;
 	int presetCount;
 } conf_T;
 
- BOOL conf_Load (LPCTSTR filename, conf_T * out);
+ conf_Result_T conf_Load (LPCTSTR filename, conf_T * out);
 
  void conf_Destroy (conf_T * conf);

@@ -21,3 +21,5 @@ void * vec_Finalize (vec_T * _vec);
 LPTSTR vec_FinalizeAsString (vec_T * _str);
 
 void vec_Destroy (vec_T * _vec);
+
+void vec_FreeBuf (void * _buf);
