@@ -5,7 +5,7 @@
 
 #define BUF_SIZE 512
 
-#define INITIAL_STRING_SIZE 16
+#define INITIAL_VEC_SIZE 8
 
 #define BOM 65279
 
@@ -26,7 +26,7 @@ typedef struct
 	DWORD error;
 	int line;
 	int column;
-	HFILE file;
+	HANDLE file;
 } FileReader;
 
 void fillBuffer (FileReader * _fr)
@@ -46,7 +46,7 @@ void fillBuffer (FileReader * _fr)
 	}
 }
 
-void makeFileReader (FileReader * _fr, HFILE _file)
+void makeFileReader (FileReader * _fr, HANDLE _file)
 {
 	_fr->pos = 0;
 	_fr->endOfFile = 0;
@@ -81,7 +81,7 @@ void skipChar (FileReader * _fr)
 	_fr->pos++;
 	if (_fr->pos >= BUF_SIZE)
 	{
-		return fillBuffer (_fr);
+		fillBuffer (_fr);
 	}
 }
 
@@ -103,11 +103,6 @@ Vector makeVector (int _itemSize)
 	return str;
 }
 
-Vector makeString (void)
-{
-	return makeVector (sizeof (TCHAR));
-}
-
 BOOL resizeVector (Vector * _vec, int _size)
 {
 	_vec->buf = realloc (_vec->buf, _vec->itemSize * _size);
@@ -121,30 +116,37 @@ BOOL resizeVector (Vector * _vec, int _size)
 	return TRUE;
 }
 
-void appendToVector (Vector * _vec, const char * _el)
+BOOL appendToVector (Vector * _vec, const void * _el)
 {
 	if (_vec->pos == _vec->size)
 	{
-		int newSize = _vec->size == 0 ? INITIAL_STRING_SIZE : _vec->size * 2;
-		resizeVector (_vec, newSize);
+		int newSize = _vec->size == 0 ? INITIAL_VEC_SIZE : _vec->size * 2;
+		if (!resizeVector (_vec, newSize))
+		{
+			return FALSE;
+		}
 	}
 	int dataLeft = _vec->itemSize;
 	while (dataLeft-- > 0)
 	{
-		_vec->buf[_vec->pos * _vec->itemSize + dataLeft] = _el[dataLeft];
+		_vec->buf[_vec->pos * _vec->itemSize + dataLeft] = ((const char *)_el)[dataLeft];
 	}
-}
-
-void appendToString (Vector * _str, TCHAR _ch)
-{
-	appendToVector (_str, &_ch);
+	_vec->pos++;
+	return TRUE;
 }
 
 LPCTSTR finalizeString (Vector * _str)
 {
-	resizeVector (_str, _str->pos + 1);
-	_str->buf[_str->pos++] = (TCHAR) '\0';
-	return _str->buf;
+	if (!resizeVector (_str, _str->pos + 1))
+	{
+		return NULL;
+	}
+	TCHAR term = '\0';
+	if (!appendToVector (_str, &term))
+	{
+		return NULL;
+	}
+	return (const TCHAR *)_str->buf;
 }
 
 BOOL isNumeric (TCHAR _ch)
@@ -222,13 +224,14 @@ BOOL readDecInt (FileReader * _fr, DWORD64 * _out)
 		}
 		else
 		{
-			if (ok)
-			{
-				*_out = val;
-			}
-			return ok;
+			break;
 		}
 	}
+	if (ok)
+	{
+		*_out = val;
+	}
+	return ok;
 }
 
 BOOL readHexInt (FileReader * _fr, DWORD64 * _out)
@@ -248,13 +251,14 @@ BOOL readHexInt (FileReader * _fr, DWORD64 * _out)
 		}
 		else
 		{
-			if (ok)
-			{
-				*_out = val;
-			}
-			return ok;
+			break;
 		}
 	}
+	if (ok)
+	{
+		*_out = val;
+	}
+	return ok;
 }
 
 BOOL readHexOrDecInt (FileReader * _fr, DWORD64 * _out)
@@ -280,7 +284,6 @@ BOOL shouldIgnore (TCHAR _ch)
 		case '\n':
 		case '\r':
 		case '\t':
-		case '\h':
 			return TRUE;
 		default:
 			return FALSE;
@@ -315,27 +318,70 @@ BOOL parseConfiguration (FileReader * _fr, Configuration * _out)
 {
 	Configuration conf;
 	ignoreSpace (_fr);
-	MUST (consumeChar (_fr, PREFIX_BULB_ID));
-	MUST (readHexOrDecInt (_fr, &conf.bulbId));
-	ignoreSpace (_fr);
-	MUST (consumeChar (_fr, PREFIX_ADDRESS));
-	for (int f = 0; f < 4; f++)
 	{
-		MUST (readDecInt (_fr, &conf.address[f]));
-		MUST (consumeChar (_fr, '.'));
+		MUST (consumeChar (_fr, PREFIX_BULB_ID));
+		MUST (readHexOrDecInt (_fr, &conf.bulbId));
 	}
-	MUST (consumeChar (_fr, PREFIX_PORT));
-	MUST (readDecInt (_fr, &conf.port));
 	ignoreSpace (_fr);
+	{
+		MUST (consumeChar (_fr, PREFIX_ADDRESS));
+		int fields[4];
+		for (int f = 0; f < 4; f++)
+		{
+			DWORD64 field;
+			if (f > 0)
+			{
+				MUST (consumeChar (_fr, '.'));
+			}
+			MUST (readDecInt (_fr, &field));
+			fields[f] = (int)field;
+		}
+		MUST (consumeChar (_fr, PREFIX_PORT));
+		DWORD64 port;
+		MUST (readDecInt (_fr, &port));
+	}
+	ignoreSpace (_fr);
+	{
+		int count = 0;
+		Vector presets = makeVector (sizeof (Preset));
+		while (hasChar (_fr))
+		{
+			MUST (consumeChar (_fr, PREFIX_COLOR));
+			DWORD64 color;
+			MUST (readHexInt (_fr, &color));
+			ignoreSpace (_fr);
+			MUST (consumeChar (_fr, PREFIX_COLORNAME));
+			Vector nameBuf = makeVector (sizeof (TCHAR));
+			while (hasChar (_fr))
+			{
+				TCHAR ch = peekChar (_fr);
+				if (peekChar (_fr) != SUFFIX_COLORNAME)
+				{
+					appendToVector (&nameBuf, &ch);
+					skipChar (_fr);
+				}
+				else
+				{
+					break;
+				}
+			}
+			LPCTSTR name = finalizeString (&nameBuf);
+			MUST (consumeChar (_fr, SUFFIX_COLORNAME));
+			ignoreSpace (_fr);
+			count++;
+		}
+	}
+	return TRUE;
 }
 
 BOOL loadConfiguration (LPCTSTR _filename, Configuration * _out)
 {
-	HFILE file = CreateFile (_filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE file = CreateFile (_filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 	if (file != INVALID_HANDLE_VALUE)
 	{
-		FileReader buf;
-		makeFileReader (&buf, file);
+		FileReader fr;
+		makeFileReader (&fr, file);
+		parseConfiguration (&fr, _out);
 		CloseHandle (file);
 		return TRUE;
 	}

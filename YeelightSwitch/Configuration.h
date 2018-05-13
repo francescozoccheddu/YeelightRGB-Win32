@@ -4,11 +4,19 @@
 
 typedef struct
 {
+	COLORREF color;
+	LPCTSTR name;
+} Preset;
+
+typedef struct
+{
 	DWORD64 bulbId;
 	int address[4];
 	int port;
-	const COLORREF * colors;
-	int colCount;
+	const Preset * presets;
+	int presetCount;
 } Configuration;
 
- loadConfiguration (LPCTSTR filename, Configuration * out);
+ BOOL loadConfiguration (LPCTSTR filename, Configuration * out);
+
+ void destroyConfiguration (Configuration * conf);
