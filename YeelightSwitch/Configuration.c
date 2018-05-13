@@ -3,9 +3,9 @@
 #include <stdlib.h>
 #include <Windows.h>
 
-#define BUF_SIZE 512
+#include "Vector.h"
 
-#define INITIAL_VEC_SIZE 8
+#define BUF_SIZE 512
 
 #define BOM 65279
 
@@ -83,70 +83,6 @@ void skipChar (FileReader * _fr)
 	{
 		fillBuffer (_fr);
 	}
-}
-
-typedef struct
-{
-	char * buf;
-	int itemSize;
-	int size;
-	int pos;
-} Vector;
-
-Vector makeVector (int _itemSize)
-{
-	Vector str;
-	str.buf = NULL;
-	str.itemSize = _itemSize;
-	str.size = 0;
-	str.pos = 0;
-	return str;
-}
-
-BOOL resizeVector (Vector * _vec, int _size)
-{
-	_vec->buf = realloc (_vec->buf, _vec->itemSize * _size);
-
-	if (!_vec->buf && _size != 0)
-	{
-		return FALSE;
-	}
-
-	_vec->size = _size;
-	return TRUE;
-}
-
-BOOL appendToVector (Vector * _vec, const void * _el)
-{
-	if (_vec->pos == _vec->size)
-	{
-		int newSize = _vec->size == 0 ? INITIAL_VEC_SIZE : _vec->size * 2;
-		if (!resizeVector (_vec, newSize))
-		{
-			return FALSE;
-		}
-	}
-	int dataLeft = _vec->itemSize;
-	while (dataLeft-- > 0)
-	{
-		_vec->buf[_vec->pos * _vec->itemSize + dataLeft] = ((const char *)_el)[dataLeft];
-	}
-	_vec->pos++;
-	return TRUE;
-}
-
-LPCTSTR finalizeString (Vector * _str)
-{
-	if (!resizeVector (_str, _str->pos + 1))
-	{
-		return NULL;
-	}
-	TCHAR term = '\0';
-	if (!appendToVector (_str, &term))
-	{
-		return NULL;
-	}
-	return (const TCHAR *)_str->buf;
 }
 
 BOOL isNumeric (TCHAR _ch)
@@ -314,9 +250,20 @@ BOOL consumeChar (FileReader * _fr, TCHAR _ch)
 	}
 }
 
-BOOL parseConfiguration (FileReader * _fr, Configuration * _out)
+BOOL makePreset (DWORD64 _color, LPTSTR _name, conf_Preset_T * _out)
 {
-	Configuration conf;
+	if (_color & (((1 << 16) - 1) << 16))
+	{
+		return FALSE;
+	}
+	_out->color = (COLORREF)_color;
+	_out->name = _name;
+	return TRUE;
+}
+
+BOOL parseConfiguration (FileReader * _fr, conf_T * _out)
+{
+	conf_T conf;
 	ignoreSpace (_fr);
 	{
 		MUST (consumeChar (_fr, PREFIX_BULB_ID));
@@ -339,11 +286,11 @@ BOOL parseConfiguration (FileReader * _fr, Configuration * _out)
 		MUST (consumeChar (_fr, PREFIX_PORT));
 		DWORD64 port;
 		MUST (readDecInt (_fr, &port));
+		// TODO make address
 	}
 	ignoreSpace (_fr);
 	{
-		int count = 0;
-		Vector presets = makeVector (sizeof (Preset));
+		vec_T presetBuf = vec_Make (sizeof (conf_Preset_T));
 		while (hasChar (_fr))
 		{
 			MUST (consumeChar (_fr, PREFIX_COLOR));
@@ -351,13 +298,13 @@ BOOL parseConfiguration (FileReader * _fr, Configuration * _out)
 			MUST (readHexInt (_fr, &color));
 			ignoreSpace (_fr);
 			MUST (consumeChar (_fr, PREFIX_COLORNAME));
-			Vector nameBuf = makeVector (sizeof (TCHAR));
+			vec_T nameBuf = vec_Make (sizeof (TCHAR));
 			while (hasChar (_fr))
 			{
 				TCHAR ch = peekChar (_fr);
 				if (peekChar (_fr) != SUFFIX_COLORNAME)
 				{
-					appendToVector (&nameBuf, &ch);
+					vec_Append (&nameBuf, &ch);
 					skipChar (_fr);
 				}
 				else
@@ -365,28 +312,50 @@ BOOL parseConfiguration (FileReader * _fr, Configuration * _out)
 					break;
 				}
 			}
-			LPCTSTR name = finalizeString (&nameBuf);
+			LPTSTR name = vec_FinalizeAsString (&nameBuf);
 			MUST (consumeChar (_fr, SUFFIX_COLORNAME));
 			ignoreSpace (_fr);
-			count++;
+			conf_Preset_T preset;
+			MUST (makePreset (color, name, &preset));
+			vec_Append (&presetBuf, &preset);
 		}
+		conf.presetCount = presetBuf.pos;
+		conf.presets = vec_Finalize (&presetBuf);
 	}
+	*_out = conf;
 	return TRUE;
 }
 
-BOOL loadConfiguration (LPCTSTR _filename, Configuration * _out)
+void conf_Preset_Destroy (conf_Preset_T * _preset)
+{
+	free (_preset->name);
+	_preset->name = NULL;
+}
+
+BOOL conf_Load (LPCTSTR _filename, conf_T * _out)
 {
 	HANDLE file = CreateFile (_filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 	if (file != INVALID_HANDLE_VALUE)
 	{
 		FileReader fr;
 		makeFileReader (&fr, file);
-		parseConfiguration (&fr, _out);
+		BOOL res = parseConfiguration (&fr, _out);
 		CloseHandle (file);
-		return TRUE;
+		return res;
 	}
 	else
 	{
 		return FALSE;
 	}
+}
+
+void conf_Destroy (conf_T * _conf)
+{
+	// TODO free address
+	for (int p = 0; p < _conf->presetCount; p++)
+	{
+		conf_Preset_Destroy (&_conf->presets[p]);
+	}
+	free (_conf->presets);
+	_conf->presets = NULL;
 }
