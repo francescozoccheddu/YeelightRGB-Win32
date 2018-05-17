@@ -131,8 +131,6 @@ HWND CreateListView (HWND _parentHwnd)
 	return (hWndListView);
 }
 
-
-
 LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lparam)
 {
 	switch (_msg)
