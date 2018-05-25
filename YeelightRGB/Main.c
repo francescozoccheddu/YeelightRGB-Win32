@@ -90,45 +90,76 @@ HWND CreateListView (HWND _parentHwnd)
 	}
 	else
 	{
-
 		ListView_SetBkColor (hWndListView, g_background);
-		HIMAGELIST hLargeIcons = ImageList_Create (GetSystemMetrics (SM_CXICON),
-			GetSystemMetrics (SM_CYICON),
-			ILC_COLOR32 | ILC_MASK, 1, 1);
-		HIMAGELIST hSmallIcons = ImageList_Create (GetSystemMetrics (SM_CXSMICON),
-			GetSystemMetrics (SM_CYSMICON),
-			ILC_COLOR32 | ILC_MASK, 1, 1);
-
-		HICON hIcon = CreateSolidColorIcon (RGB (0, 255, 0), 32);
-		LVITEM lvi = { 0 };
-
-		lvi.mask = LVIF_TEXT | LVIF_IMAGE;
-		int i;
-		for (i = 0; i < 4; ++i)
-		{
-			ImageList_AddIcon (hLargeIcons, hIcon);
-			ImageList_AddIcon (hSmallIcons, hIcon);
-		}
-		DestroyIcon (hIcon);
-		//attach image lists to list view common control
-		ListView_SetImageList (hWndListView, hLargeIcons, LVSIL_NORMAL);
-		ListView_SetImageList (hWndListView, hSmallIcons, LVSIL_SMALL);
-
-		//add some items to the the list view common control
-
-		//flags to determine what information is to be set
-		TCHAR chBuffer[16] = TEXT ("Test");
-		for (i = 0; i < 4; ++i)
-		{
-			lvi.iItem = i;                     //the zero-based item index 
-			lvi.pszText = chBuffer;            //item label
-			lvi.cchTextMax = lstrlen (chBuffer);//length of item label
-			lvi.iImage = i;                    //image list index
-			SendMessage (hWndListView, LVM_INSERTITEM, 0, (LPARAM)&lvi);
-		}
 	}
 
 	return (hWndListView);
+}
+
+void ResetColorList (const conf_Preset_T * _presets, int _count)
+{
+
+	static HIMAGELIST hLargeIcons = NULL;
+	static HIMAGELIST hSmallIcons = NULL;
+
+	if (hLargeIcons)
+	{
+		ImageList_Destroy (hLargeIcons);
+		hLargeIcons = NULL;
+	}
+
+	if (hSmallIcons)
+	{
+		ImageList_Destroy (hSmallIcons);
+		hSmallIcons = NULL;
+	}
+
+	int cx = GetSystemMetrics (SM_CXICON);
+	int cy = GetSystemMetrics (SM_CYICON);
+	int cxSm = GetSystemMetrics (SM_CXSMICON);
+	int cySm = GetSystemMetrics (SM_CYSMICON);
+	
+	hLargeIcons = ImageList_Create (cx, cy, ILC_COLOR32 | ILC_MASK, 1, 1);
+	hSmallIcons = ImageList_Create (cxSm, cySm, ILC_COLOR32 | ILC_MASK, 1, 1);
+
+	int i;
+	for (i = 0; i < _count; ++i)
+	{
+		HICON hIcon = CreateSolidColorIcon (_presets[i].color, max(cx,cy));
+		ImageList_AddIcon (hLargeIcons, hIcon);
+		ImageList_AddIcon (hSmallIcons, hIcon);
+		DestroyIcon (hIcon);
+	}
+
+	ListView_SetImageList (g_list, hLargeIcons, LVSIL_NORMAL);
+	ListView_SetImageList (g_list, hSmallIcons, LVSIL_SMALL);
+
+	LVITEM lvi = { 0 };
+	lvi.mask = LVIF_TEXT | LVIF_IMAGE;
+
+	for (i = 0; i < _count; ++i)
+	{
+		LPCTSTR text = _presets[i].name;
+		lvi.iItem = i;
+		lvi.pszText = text;
+		lvi.cchTextMax = text;
+		lvi.iImage = i;
+		SendMessage (g_list, LVM_INSERTITEM, 0, (LPARAM)&lvi);
+	}
+}
+
+void ReloadConfiguration ()
+{
+	conf_T conf;
+	conf_Result_T res = conf_Load (TryLoadString (IDS_CONF_FILENAME), &conf);
+	if (res.code == conf_RC_OK)
+	{
+		ResetColorList (conf.presets, conf.presetCount);
+	}
+	else
+	{
+		PrintError ("ivweijfiow");
+	}
 }
 
 LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lparam)
@@ -145,6 +176,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 		case WM_CREATE:
 		{
 			g_list = CreateListView (_hwnd);
+			ReloadConfiguration ();
 		}
 		break;
 		case WM_SIZE:
@@ -173,7 +205,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 					case CDDS_PREPAINT:
 						return CDRF_NOTIFYITEMDRAW;
 					case CDDS_ITEMPREPAINT:
-						lplvcd->clrText = RGB (0, 0, 0);
+						lplvcd->clrText = RGB (200, 200, 200);
 						lplvcd->clrTextBk = g_background;
 						return CDRF_NEWFONT;
 					case CDDS_SUBITEM | CDDS_ITEMPREPAINT:
@@ -203,7 +235,7 @@ LPCTSTR TryLoadString (UINT _id)
 	LPCTSTR ptr;
 	if (LoadString (g_hInstance, _id, (LPTSTR)&ptr, 0) <= 0)
 	{
-		ptr = TEXT ("");
+		PrintError ("Unable to load string");
 	}
 	return ptr;
 }
@@ -243,9 +275,6 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 
 	ShowWindow (window, _cmdShow);
 	UpdateWindow (window);
-	
-	conf_T conf;
-	conf_Result_T confRes = conf_Load (TEXT("C:/Users/zocch/Desktop/hello.txt"), &conf);
 
 	MSG msg;
 	BOOL bRes;
