@@ -3,12 +3,12 @@
 #include <Windows.h>
 
 #include "Vector.h"
+#include "Send.h"
 
 #define _conf_FR_BUF_SIZE 512
 
 #define _conf_CH_BOM 65279
 
-#define _conf_CH_PREFIX_BULB_ID '?'
 #define _conf_CH_PREFIX_ADDRESS '@'
 #define _conf_CH_PREFIX_PORT ':'
 #define _conf_CH_PREFIX_COLOR '#'
@@ -264,13 +264,7 @@ BOOL _conf_Parse (_conf_FileReader_T * _fr, conf_T * _out)
 	conf_T conf;
 	_conf_IgnoreSpace (_fr);
 	{
-		_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_BULB_ID));
-		_conf_MUST (_conf_ParseHexOrDecInt (_fr, &conf.bulbId));
-	}
-	_conf_IgnoreSpace (_fr);
-	{
 		_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_ADDRESS));
-		int fields[4];
 		for (int f = 0; f < 4; f++)
 		{
 			DWORD64 field;
@@ -279,12 +273,12 @@ BOOL _conf_Parse (_conf_FileReader_T * _fr, conf_T * _out)
 				_conf_MUST (_conf_ConsumeChar (_fr, '.'));
 			}
 			_conf_MUST (_conf_ParseDecInt (_fr, &field));
-			fields[f] = (int)field;
+			conf.ipFields[f] = (int)field;
 		}
 		_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_PORT));
 		DWORD64 port;
 		_conf_MUST (_conf_ParseDecInt (_fr, &port));
-		// TODO make address
+		conf.port = (int)port;
 	}
 	_conf_IgnoreSpace (_fr);
 	{

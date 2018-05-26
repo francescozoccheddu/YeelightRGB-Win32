@@ -4,131 +4,48 @@
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 
 #pragma comment (lib, "Ws2_32.lib")
 #pragma comment (lib, "Mswsock.lib")
 #pragma comment (lib, "AdvApi32.lib")
 
-
 #define DEFAULT_BUFLEN 512
 #define BULB_ID "0"
-#define MSG_RESULT_OK "{\"id\":" BULB_ID ", \"result\":[\"ok\"]}\r\n"
 #define MSG_TOGGLE "{\"id\":" BULB_ID ",\"method\":\"toggle\",\"params\":[]}\r\n"
 
 SOCKET send_socket = INVALID_SOCKET;
 HANDLE send_thread = NULL;
 
-BOOL send_Command (LPCTSTR _msg)
+struct sockaddr_in send_addr;
+
+BOOL send_Command (const char * _msg)
 {
 	SOCKET ConnectSocket = INVALID_SOCKET;
-	struct addrinfo *result = NULL,
-		*ptr = NULL,
-		hints;
 	int iResult;
 
-	// Initialize Winsock
-	
-
-	ZeroMemory (&hints, sizeof (hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_protocol = IPPROTO_TCP;
-
-	// Resolve the server address and port
-	iResult = getaddrinfo ("192.168.1.4", "55443", &hints, &result);
-	if (iResult != 0)
+	ConnectSocket = WSASocket (AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_NO_HANDLE_INHERIT);
+	if (ConnectSocket == INVALID_SOCKET)
 	{
-		printf ("getaddrinfo failed with error: %d\n", iResult);
-		return 1;
+		return FALSE;
 	}
 
-	// Attempt to connect to an address until one succeeds
-	for (ptr = result; ptr != NULL; ptr = ptr->ai_next)
+	iResult = WSAConnect (ConnectSocket, &send_addr, sizeof(send_addr), NULL, NULL, NULL, NULL);
+	if (iResult == SOCKET_ERROR)
 	{
-
-		// Create a SOCKET for connecting to server
-		ConnectSocket = socket (ptr->ai_family, ptr->ai_socktype,
-			ptr->ai_protocol);
-		if (ConnectSocket == INVALID_SOCKET)
-		{
-			printf ("socket failed with error: %ld\n", WSAGetLastError ());
-			return 1;
-		}
-
-		// Connect to server.
-		iResult = connect (ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
-		if (iResult == SOCKET_ERROR)
-		{
-			closesocket (ConnectSocket);
-			ConnectSocket = INVALID_SOCKET;
-			continue;
-		}
-		break;
+		closesocket (ConnectSocket);
+		return FALSE;
 	}
-
-	freeaddrinfo (result);
 
 	if (ConnectSocket == INVALID_SOCKET)
 	{
-		printf ("Unable to connect to server!\n");
-		return 1;
+		return FALSE;
 	}
 
-	// Send an initial buffer
 	iResult = send (ConnectSocket, _msg, (int)strlen (_msg), 0);
-	if (iResult == SOCKET_ERROR)
-	{
-		printf ("send failed with error: %d\n", WSAGetLastError ());
-		closesocket (ConnectSocket);
-		return 1;
-	}
 
-	printf ("Bytes Sent: %ld\n", iResult);
-
-	// shutdown the connection since no more data will be sent
-	iResult = shutdown (ConnectSocket, SD_SEND);
-	if (iResult == SOCKET_ERROR)
-	{
-		printf ("shutdown failed with error: %d\n", WSAGetLastError ());
-		closesocket (ConnectSocket);
-		return 1;
-	}
-
-	BOOL resultOk = FALSE;
-
-	// Receive until the peer closes the connection
-	while (1)
-	{
-		char recvbuf[DEFAULT_BUFLEN];
-		iResult = recv (ConnectSocket, recvbuf, DEFAULT_BUFLEN, MSG_WAITALL);
-		if (iResult > 0)
-		{
-			if (strcmp (recvbuf, MSG_RESULT_OK) == 0)
-			{
-				resultOk = TRUE;
-				break;
-			}
-		}
-		else if (iResult == 0)
-		{
-			// Connection closed
-			break;
-		}
-		else
-		{
-			// Error
-			break;
-		}
-
-	}
-
-	// cleanup
 	closesocket (ConnectSocket);
 
-	return 0;
+	return iResult == SOCKET_ERROR ? FALSE : TRUE;
 }
 
 DWORD WINAPI send_thread_proc (LPVOID _param)
@@ -136,13 +53,37 @@ DWORD WINAPI send_thread_proc (LPVOID _param)
 	return send_Command (MSG_TOGGLE);
 }
 
+HANDLE send_Run ()
+{
+	DWORD threadId;
+	CreateThread (NULL, 0, &send_thread_proc, NULL, 0, &threadId);
+}
+
 BOOL send_Toggle ()
 {
 	if (!send_thread)
 	{
-		DWORD threadId;
-		send_thread = CreateThread (NULL, 0, &send_thread_proc, NULL, 0, &threadId);
+		send_thread = CreateThread (NULL, 0, &send_thread_proc, NULL, 0, NULL);
 	}
+	else
+	{
+		if (WaitForSingleObject (send_thread, 0) == WAIT_OBJECT_0)
+		{
+			CloseHandle (send_thread);
+			send_thread = CreateThread (NULL, 0, &send_thread_proc, NULL, 0, NULL);
+		}
+	}
+
+	if (!send_thread)
+	{
+		// thread creation failed
+		return FALSE;
+	}
+	else
+	{
+		return TRUE;
+	}
+
 }
 
 void send_Dispose (void)
@@ -153,10 +94,18 @@ void send_Dispose (void)
 BOOL send_Init (void)
 {
 	WSADATA wsaData;
-	int iResult = WSAStartup (MAKEWORD (2, 2), &wsaData);
-	if (iResult != 0)
-	{
-		printf ("WSAStartup failed with error: %d\n", iResult);
-		return 1;
-	}
+	return WSAStartup (MAKEWORD (2, 2), &wsaData) == 0;
 }
+
+void send_Set (const int * _ipFields, int _port)
+{
+	struct in_addr addr;
+	addr.S_un.S_un_b.s_b1 = _ipFields[0];
+	addr.S_un.S_un_b.s_b2 = _ipFields[1];
+	addr.S_un.S_un_b.s_b3 = _ipFields[2];
+	addr.S_un.S_un_b.s_b4 = _ipFields[3];
+	send_addr.sin_family = AF_INET;
+	send_addr.sin_addr = addr;
+	send_addr.sin_port = htons(_port);
+}
+

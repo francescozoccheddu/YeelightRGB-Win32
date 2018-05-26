@@ -35,6 +35,7 @@ typedef struct
 {
 	DWORD64 bulbId;
 	int port;
+	int ipFields[4];
 	conf_Preset_T * presets;
 	int presetCount;
 } conf_T;

@@ -163,6 +163,7 @@ void ReloadConfiguration (void)
 	conf_Result_T res = conf_Load (TryLoadString (IDS_CONF_FILENAME), &conf);
 	if (res.code == conf_RC_OK)
 	{
+		send_Set (conf.ipFields, conf.port);
 		ResetColorList (conf.presets, conf.presetCount);
 		conf_Destroy (&conf);
 	}
