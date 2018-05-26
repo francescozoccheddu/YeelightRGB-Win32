@@ -9,6 +9,7 @@
 #define IDS_ERROR_MESSAGE_LOOP_CAPTION  106
 #define IDS_ERROR_CREATE_CHILD_WINDOW_CAPTION 107
 #define IDS_CONF_FILENAME               108
+#define IDS_NOTIFYICON_TIP              109
 
 // Next default values for new objects
 // 
