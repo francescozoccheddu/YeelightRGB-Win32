@@ -159,7 +159,6 @@
     <ClInclude Include="Configuration.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Send.h" />
-    <ClInclude Include="Utils.h" />
     <ClInclude Include="Vector.h" />
   </ItemGroup>
   <ItemGroup>
@@ -172,7 +171,6 @@
     <ClCompile Include="Configuration.c" />
     <ClCompile Include="Main.c" />
     <ClCompile Include="Send.c" />
-    <ClCompile Include="Utils.c" />
     <ClCompile Include="Vector.c" />
   </ItemGroup>
   <ItemGroup>

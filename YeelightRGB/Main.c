@@ -1,7 +1,8 @@
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <CommCtrl.h>
-#include <initguid.h>
 #include <strsafe.h>
+#include <shellapi.h>
 #include "resource.h"
 
 #include "Send.h"
@@ -12,14 +13,15 @@
 #define IDC_LIST 108
 #define WM_NOTIFYICON 110
 #define IDC_NOTIFYICON 109
-DEFINE_GUID (GUID_NOTIFYICON, 0x5ac7728e, 0x55c8, 0x496e, 0x8f, 0xf2, 0xf7, 0x37, 0x69, 0xf6, 0xc3, 0xe1);
-
 
 const COLORREF g_background = RGB (50, 50, 50);
 const COLORREF g_foregroundInactive = RGB (200, 200, 200);
 const int g_padding = 15;
+
 HINSTANCE g_hInstance = NULL;
 HWND g_list = NULL;
+
+
 
 void PrintError (LPCTSTR _caption);
 
@@ -184,6 +186,7 @@ void AddNotifyIcon (HWND _parent)
 	Shell_NotifyIcon (NIM_ADD, &data);
 }
 
+
 LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lparam)
 {
 	static UINT wmTaskbarCreated;
@@ -198,7 +201,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 				{
 					case WM_LBUTTONUP:
 					{
-						send_TEST ();
+						send_Toggle ();
 						break;
 					}
 					case WM_RBUTTONUP:
@@ -317,6 +320,12 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 {
 	g_hInstance = _hInstance;
 
+	AllocConsole ();
+	AttachConsole (GetCurrentProcessId ());
+	freopen ("CON", "w", stdout);
+
+	send_Init ();
+
 	ATOM mainClassAtom = 0;
 	{
 		WNDCLASS mainClass;
@@ -362,6 +371,8 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 		}
 
 	}
+
+	send_Dispose ();
 
 	return 0;
 }

@@ -1,4 +1,10 @@
 #pragma once
 
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 
-int send_TEST (void);
+BOOL send_Toggle (void);
+
+void send_Dispose (void);
+
+BOOL send_Init (void);

@@ -6,7 +6,7 @@
 #include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdio.h>
-
+#include <string.h>
 
 #pragma comment (lib, "Ws2_32.lib")
 #pragma comment (lib, "Mswsock.lib")
@@ -14,26 +14,23 @@
 
 
 #define DEFAULT_BUFLEN 512
+#define BULB_ID "0"
+#define MSG_RESULT_OK "{\"id\":" BULB_ID ", \"result\":[\"ok\"]}\r\n"
+#define MSG_TOGGLE "{\"id\":" BULB_ID ",\"method\":\"toggle\",\"params\":[]}\r\n"
 
-int send_TEST (void)
+SOCKET send_socket = INVALID_SOCKET;
+HANDLE send_thread = NULL;
+
+BOOL send_Command (LPCTSTR _msg)
 {
-	WSADATA wsaData;
 	SOCKET ConnectSocket = INVALID_SOCKET;
 	struct addrinfo *result = NULL,
 		*ptr = NULL,
 		hints;
-	char *sendbuf = "{\"id\":0x00000000036243b3,\"method\":\"toggle\",\"params\":[]}\r\n";
-	char recvbuf[DEFAULT_BUFLEN];
 	int iResult;
-	int recvbuflen = DEFAULT_BUFLEN;
 
 	// Initialize Winsock
-	iResult = WSAStartup (MAKEWORD (2, 2), &wsaData);
-	if (iResult != 0)
-	{
-		printf ("WSAStartup failed with error: %d\n", iResult);
-		return 1;
-	}
+	
 
 	ZeroMemory (&hints, sizeof (hints));
 	hints.ai_family = AF_UNSPEC;
@@ -45,7 +42,6 @@ int send_TEST (void)
 	if (iResult != 0)
 	{
 		printf ("getaddrinfo failed with error: %d\n", iResult);
-		WSACleanup ();
 		return 1;
 	}
 
@@ -59,7 +55,6 @@ int send_TEST (void)
 		if (ConnectSocket == INVALID_SOCKET)
 		{
 			printf ("socket failed with error: %ld\n", WSAGetLastError ());
-			WSACleanup ();
 			return 1;
 		}
 
@@ -79,17 +74,15 @@ int send_TEST (void)
 	if (ConnectSocket == INVALID_SOCKET)
 	{
 		printf ("Unable to connect to server!\n");
-		WSACleanup ();
 		return 1;
 	}
 
 	// Send an initial buffer
-	iResult = send (ConnectSocket, sendbuf, (int)strlen (sendbuf), 0);
+	iResult = send (ConnectSocket, _msg, (int)strlen (_msg), 0);
 	if (iResult == SOCKET_ERROR)
 	{
 		printf ("send failed with error: %d\n", WSAGetLastError ());
 		closesocket (ConnectSocket);
-		WSACleanup ();
 		return 1;
 	}
 
@@ -101,29 +94,69 @@ int send_TEST (void)
 	{
 		printf ("shutdown failed with error: %d\n", WSAGetLastError ());
 		closesocket (ConnectSocket);
-		WSACleanup ();
 		return 1;
 	}
 
-	// Receive until the peer closes the connection
-	do
-	{
+	BOOL resultOk = FALSE;
 
-		iResult = recv (ConnectSocket, recvbuf, recvbuflen, 0);
+	// Receive until the peer closes the connection
+	while (1)
+	{
+		char recvbuf[DEFAULT_BUFLEN];
+		iResult = recv (ConnectSocket, recvbuf, DEFAULT_BUFLEN, MSG_WAITALL);
 		if (iResult > 0)
-			printf ("Bytes received: %d\n", iResult);
+		{
+			if (strcmp (recvbuf, MSG_RESULT_OK) == 0)
+			{
+				resultOk = TRUE;
+				break;
+			}
+		}
 		else if (iResult == 0)
-			printf ("Connection closed\n");
+		{
+			// Connection closed
+			break;
+		}
 		else
-			printf ("recv failed with error: %d\n", WSAGetLastError ());
+		{
+			// Error
+			break;
+		}
 
 	}
-	while (iResult > 0);
 
 	// cleanup
 	closesocket (ConnectSocket);
-	WSACleanup ();
 
 	return 0;
 }
 
+DWORD WINAPI send_thread_proc (LPVOID _param)
+{
+	return send_Command (MSG_TOGGLE);
+}
+
+BOOL send_Toggle ()
+{
+	if (!send_thread)
+	{
+		DWORD threadId;
+		send_thread = CreateThread (NULL, 0, &send_thread_proc, NULL, 0, &threadId);
+	}
+}
+
+void send_Dispose (void)
+{
+	WSACleanup ();
+}
+
+BOOL send_Init (void)
+{
+	WSADATA wsaData;
+	int iResult = WSAStartup (MAKEWORD (2, 2), &wsaData);
+	if (iResult != 0)
+	{
+		printf ("WSAStartup failed with error: %d\n", iResult);
+		return 1;
+	}
+}

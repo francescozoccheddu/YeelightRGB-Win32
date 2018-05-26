@@ -21,9 +21,6 @@
     <ClInclude Include="Configuration.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="Utils.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="Vector.h">
       <Filter>Source Files</Filter>
     </ClInclude>
@@ -46,9 +43,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Configuration.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Utils.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Vector.c">
