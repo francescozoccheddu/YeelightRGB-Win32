@@ -1,7 +1,7 @@
 #include "Vector.h"
 
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
-#include <stdlib.h>
 
 #define INITIAL_VEC_SIZE 8
 
@@ -17,7 +17,7 @@ vec_T vec_Make (int _itemSize)
 
 BOOL vec_Resize (vec_T * _vec, int _size)
 {
-	_vec->buf = realloc (_vec->buf, _vec->itemSize * _size);
+	_vec->buf = HeapReAlloc (GetProcessHeap (), 0, _vec->buf, _vec->itemSize * _size);
 
 	if (!_vec->buf && _size != 0)
 	{
@@ -82,6 +82,6 @@ void vec_Destroy (vec_T * _vec)
 
 void vec_FreeBuf (void * _buf)
 {
-	free (_buf);
+	HeapFree (GetProcessHeap(), 0, _buf);
 }
 

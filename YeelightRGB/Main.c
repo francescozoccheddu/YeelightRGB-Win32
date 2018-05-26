@@ -21,7 +21,9 @@ const int g_padding = 15;
 HINSTANCE g_hInstance = NULL;
 HWND g_list = NULL;
 
-
+void SendCommandProc (send_Result_T _res)
+{
+}
 
 void PrintError (LPCTSTR _caption);
 
@@ -163,7 +165,7 @@ void ReloadConfiguration (void)
 	conf_Result_T res = conf_Load (TryLoadString (IDS_CONF_FILENAME), &conf);
 	if (res.code == conf_RC_OK)
 	{
-		send_Set (conf.ipFields, conf.port);
+		send_Set (conf.ipFields, conf.port, &SendCommandProc);
 		ResetColorList (conf.presets, conf.presetCount);
 		conf_Destroy (&conf);
 	}
