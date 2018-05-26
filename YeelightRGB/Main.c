@@ -4,6 +4,7 @@
 #include <strsafe.h>
 #include "resource.h"
 
+#include "Send.h"
 #include "Configuration.h"
 
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
@@ -197,18 +198,13 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 				{
 					case WM_LBUTTONUP:
 					{
+						send_TEST ();
 						break;
 					}
 					case WM_RBUTTONUP:
 					{
-						if (IsWindowVisible (_hwnd))
-						{
-							SetForegroundWindow (_hwnd);
-						}
-						else
-						{
-							ShowWindow (_hwnd, SW_SHOW);
-						}
+						ShowWindow (_hwnd, SW_SHOWNORMAL);
+						SetForegroundWindow (_hwnd);
 						break;
 					}
 				}
@@ -260,7 +256,6 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 						LPNMLISTVIEW pnmv = (LPNMLISTVIEW)_lparam;
 						if ((pnmv->uChanged   & LVIF_STATE) && (pnmv->uNewState & LVIS_SELECTED))
 						{
-							MessageBox (0, L"Item has been selected", 0, 0);
 							// Specific item: pnmv->iItem
 						}
 						return TRUE;

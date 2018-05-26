@@ -27,6 +27,9 @@
     <ClInclude Include="Vector.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="Send.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Resource.rc">
@@ -49,6 +52,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Vector.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Send.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
