@@ -11,15 +11,15 @@
 #define IDS_CONF_FILENAME               108
 #define IDS_NOTIFYICON_TIP              109
 #define IDS_ERROR_CONF_LOAD_CAPTION     110
-#define IDS_ERROR_SEND_BUSY_TEXT        115
+#define IDS_ERROR_BUSY_TEXT             115
 #define IDS_ERROR_SEND_CAPTION          117
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        111
-#define _APS_NEXT_COMMAND_VALUE         40001
+#define _APS_NEXT_RESOURCE_VALUE        112
+#define _APS_NEXT_COMMAND_VALUE         40005
 #define _APS_NEXT_CONTROL_VALUE         1001
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

@@ -16,12 +16,21 @@
 #define IDC_NOTIFYICON 109
 #define WM_NOTIFYICON 110
 #define WM_SEND_RESULT 111
+#define WP_HKEY_QUIT 112
+#define WP_HKEY_RELOAD_CONF 113
+#define WP_HKEY_TOGGLE 114
+
+#define HKEY_MODS MOD_ALT | MOD_SHIFT | MOD_CONTROL | MOD_NOREPEAT
+
+#define HKEY_VK_QUIT 0x51
+#define HKEY_VK_RELOAD_CONF 0x52
+#define HKEY_VK_TOGGLE 0x54
 
 #define BUSY_ERR TEXT("Error at line %u.")
 
 #define PrintLastError(x) PrintSysError(x, GetLastError())
 
-const int g_padding = 0;
+const int g_padding = 15;
 
 HINSTANCE g_hInstance = NULL;
 HWND g_list = NULL;
@@ -33,6 +42,8 @@ BOOL g_busy = FALSE;
 void PrintSysError (UINT _captionId, UINT _error);
 
 void PrintError (UINT _captionId, UINT _textId);
+
+void Toggle (void);
 
 LPCTSTR TryLoadString (UINT _id);
 
@@ -165,28 +176,35 @@ void ResetColorList (void)
 
 void ReloadConfiguration (HWND _hwnd)
 {
-	conf_Destroy (&g_conf);
-	conf_Result_T res = conf_Load (TryLoadString (IDS_CONF_FILENAME), &g_conf);
-	if (res.code != conf_RC_OK)
+	if (g_busy)
 	{
-		switch (res.code)
-		{
-			case conf_RC_FORMERR:
-			{
-				int len = sizeof (BUSY_ERR) / sizeof (char) + 16;
-				TCHAR * text = HeapAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, len * sizeof (TCHAR));
-				StringCchPrintf (text, len, BUSY_ERR, res.data.lastFilePos);
-				MessageBox (NULL, text, TryLoadString(IDS_ERROR_CONF_LOAD_CAPTION), MB_OK | MB_ICONERROR);
-				HeapFree (GetProcessHeap (), 0, text);
-			}
-			break;
-			case conf_RC_IOERR:
-				PrintSysError (IDS_ERROR_CONF_LOAD_CAPTION, res.data.ioErr);
-				break;
-		}
+		PrintError (IDS_ERROR_CONF_LOAD_CAPTION, IDS_ERROR_BUSY_TEXT);
 	}
-	send_Set (g_conf.ipFields, g_conf.port, _hwnd, WM_SEND_RESULT);
-	ResetColorList ();
+	else
+	{
+		conf_Destroy (&g_conf);
+		conf_Result_T res = conf_Load (TryLoadString (IDS_CONF_FILENAME), &g_conf);
+		if (res.code != conf_RC_OK)
+		{
+			switch (res.code)
+			{
+				case conf_RC_FORMERR:
+				{
+					int len = sizeof (BUSY_ERR) / sizeof (char) + 16;
+					TCHAR * text = HeapAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, len * sizeof (TCHAR));
+					StringCchPrintf (text, len, BUSY_ERR, res.data.lastFilePos);
+					MessageBox (NULL, text, TryLoadString (IDS_ERROR_CONF_LOAD_CAPTION), MB_OK | MB_ICONERROR);
+					HeapFree (GetProcessHeap (), 0, text);
+				}
+				break;
+				case conf_RC_IOERR:
+					PrintSysError (IDS_ERROR_CONF_LOAD_CAPTION, res.data.ioErr);
+					break;
+			}
+		}
+		send_Set (g_conf.ipFields, g_conf.port, _hwnd, WM_SEND_RESULT);
+		ResetColorList ();
+	}
 }
 
 void AddNotifyIcon (HWND _parent)
@@ -209,6 +227,22 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 
 	switch (_msg)
 	{
+		case WM_HOTKEY:
+		{
+			switch (_wparam)
+			{
+				case WP_HKEY_QUIT:
+					DestroyWindow (_hwnd);
+					break;
+				case WP_HKEY_RELOAD_CONF:
+					ReloadConfiguration (_hwnd);
+					break;
+				case WP_HKEY_TOGGLE:
+					Toggle ();
+					break;
+			}
+		}
+		break;
 		case WM_SEND_RESULT:
 		{
 			UINT errorId = (UINT)_wparam;
@@ -228,23 +262,8 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 				{
 					case WM_LBUTTONUP:
 					{
-						if (g_busy)
-						{
-							PrintError (IDS_ERROR_SEND_CAPTION, IDS_ERROR_SEND_BUSY_TEXT);
-						}
-						else
-						{
-							if (bulb_Toggle ())
-							{
-								g_busy = TRUE;
-								EnableWindow (g_list, FALSE);
-							}
-							else
-							{
-								PrintLastError (IDS_ERROR_SEND_CAPTION);
-							}
-							break;
-						}
+						Toggle ();
+						break;
 					}
 					case WM_RBUTTONUP:
 					{
@@ -299,7 +318,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 				{
 					if (g_busy)
 					{
-						PrintError (IDS_ERROR_SEND_CAPTION, IDS_ERROR_SEND_BUSY_TEXT);
+						PrintError (IDS_ERROR_SEND_CAPTION, IDS_ERROR_BUSY_TEXT);
 					}
 					else
 					{
@@ -348,6 +367,26 @@ void PrintError (UINT _captionId, UINT _textId)
 	MessageBox (NULL, text, caption, MB_OK | MB_ICONERROR);
 }
 
+void Toggle (void)
+{
+	if (g_busy)
+	{
+		PrintError (IDS_ERROR_SEND_CAPTION, IDS_ERROR_BUSY_TEXT);
+	}
+	else
+	{
+		if (bulb_Toggle ())
+		{
+			g_busy = TRUE;
+			EnableWindow (g_list, FALSE);
+		}
+		else
+		{
+			PrintLastError (IDS_ERROR_SEND_CAPTION);
+		}
+	}
+}
+
 LPCTSTR TryLoadString (UINT _id)
 {
 	LPCTSTR ptr;
@@ -365,6 +404,7 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 
 	send_Init ();
 	conf_Empty (&g_conf);
+
 
 	ATOM mainClassAtom = 0;
 	{
@@ -394,6 +434,10 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 		PrintLastError (IDS_ERROR_CREATE_MAIN_WINDOW_CAPTION);
 		return 0;
 	}
+
+	RegisterHotKey (window, WP_HKEY_QUIT, HKEY_MODS, HKEY_VK_QUIT);
+	RegisterHotKey (window, WP_HKEY_RELOAD_CONF, HKEY_MODS, HKEY_VK_RELOAD_CONF);
+	RegisterHotKey (window, WP_HKEY_TOGGLE, HKEY_MODS, HKEY_VK_TOGGLE);
 
 	MSG msg;
 	BOOL bRes;
