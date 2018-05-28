@@ -3,8 +3,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
+#include "Bulb.h"
 #include "Vector.h"
-#include "Send.h"
 
 #define _conf_FR_BUF_SIZE 512
 
@@ -169,47 +169,6 @@ BOOL _conf_ParseDecInt (_conf_FileReader_T * _fr, DWORD64 * _out)
 	return ok;
 }
 
-BOOL _conf_ParseHexInt (_conf_FileReader_T * _fr, DWORD64 * _out)
-{
-	DWORD64 val = 0;
-	BOOL ok = FALSE;
-	while (_conf_FileReader_HasChar (_fr))
-	{
-		TCHAR ch = _conf_FileReader_Peek (_fr);
-		int dig;
-		if (_conf_HexChToInt (ch, &dig))
-		{
-			ok = TRUE;
-			val <<= 4;
-			val |= dig;
-			_conf_FileReader_Next (_fr);
-		}
-		else
-		{
-			break;
-		}
-	}
-	if (ok)
-	{
-		*_out = val;
-	}
-	return ok;
-}
-
-BOOL _conf_ParseHexOrDecInt (_conf_FileReader_T * _fr, DWORD64 * _out)
-{
-	if (_conf_FileReader_HasChar (_fr) && _conf_FileReader_Peek (_fr) == (TCHAR) '0')
-	{
-		_conf_FileReader_Next (_fr);
-		if (_conf_FileReader_HasChar (_fr) && _conf_FileReader_Peek (_fr) == (TCHAR) 'x')
-		{
-			_conf_FileReader_Next (_fr);
-			return _conf_ParseHexInt (_fr, _out);
-		}
-	}
-	return _conf_ParseDecInt (_fr, _out);
-}
-
 BOOL _conf_ch_ShouldIgnore (TCHAR _ch)
 {
 	switch (_ch)
@@ -249,17 +208,6 @@ BOOL _conf_ConsumeChar (_conf_FileReader_T * _fr, TCHAR _ch)
 	}
 }
 
-BOOL _conf_Preset_Make (DWORD64 _color, LPTSTR _name, conf_Preset_T * _out)
-{
-	if (_color & (((1 << 16) - 1) << 16))
-	{
-		return FALSE;
-	}
-	_out->color = (COLORREF)_color;
-	_out->name = _name;
-	return TRUE;
-}
-
 BOOL _conf_Parse (_conf_FileReader_T * _fr, conf_T * _out)
 {
 	conf_T conf;
@@ -287,10 +235,19 @@ BOOL _conf_Parse (_conf_FileReader_T * _fr, conf_T * _out)
 		vec_T presetBuf = vec_Make (sizeof (conf_Preset_T));
 		while (_conf_FileReader_HasChar (_fr))
 		{
+			conf_Preset_T preset;
 			_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_COLOR));
-			DWORD64 color;
-			_conf_MUST (_conf_ParseHexInt (_fr, &color));
+			DWORD64 temp;
+			_conf_MUST (_conf_ParseDecInt (_fr, &temp));
+			preset.color.hue = (int)temp;
 			_conf_IgnoreSpace (_fr);
+			_conf_MUST (_conf_ParseDecInt (_fr, &temp));
+			preset.color.saturation = (int)temp;
+			_conf_IgnoreSpace (_fr);
+			_conf_MUST (_conf_ParseDecInt (_fr, &temp));
+			preset.color.brightness = (int)temp;
+			_conf_IgnoreSpace (_fr);
+			_conf_MUST (bulb_IsColorValid (preset.color));
 			_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_COLORNAME));
 			vec_T nameBuf = vec_Make (sizeof (TCHAR));
 			while (_conf_FileReader_HasChar (_fr))
@@ -306,11 +263,9 @@ BOOL _conf_Parse (_conf_FileReader_T * _fr, conf_T * _out)
 					break;
 				}
 			}
-			LPTSTR name = vec_FinalizeAsString (&nameBuf);
+			preset.name = vec_FinalizeAsString (&nameBuf);
 			_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_SUFFIX_COLORNAME));
 			_conf_IgnoreSpace (_fr);
-			conf_Preset_T preset;
-			_conf_MUST (_conf_Preset_Make (color, name, &preset));
 			vec_Append (&presetBuf, &preset);
 		}
 		conf.presetCount = presetBuf.pos;
@@ -322,7 +277,7 @@ BOOL _conf_Parse (_conf_FileReader_T * _fr, conf_T * _out)
 
 void conf_Preset_Destroy (conf_Preset_T * _preset)
 {
-	HeapFree (GetProcessHeap(), 0, _preset->name);
+	HeapFree (GetProcessHeap (), 0, _preset->name);
 	_preset->name = NULL;
 }
 
@@ -369,5 +324,18 @@ void conf_Destroy (conf_T * _conf)
 		conf_Preset_Destroy (&_conf->presets[p]);
 	}
 	vec_FreeBuf (_conf->presets);
+	conf_Empty (_conf);
+}
+
+
+
+void conf_Empty (conf_T * _conf)
+{
+	_conf->presetCount = 0;
 	_conf->presets = NULL;
+	for (int f = 0; f < 4; f++)
+	{
+		_conf->ipFields[f] = 0;
+	}
+	_conf->port = 0;
 }

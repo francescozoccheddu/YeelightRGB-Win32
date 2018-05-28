@@ -156,6 +156,7 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Bulb.h" />
     <ClInclude Include="Configuration.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Send.h" />
@@ -168,6 +169,7 @@
     <Image Include="icon.ico" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Bulb.c" />
     <ClCompile Include="Configuration.c" />
     <ClCompile Include="Main.c" />
     <ClCompile Include="Send.c" />

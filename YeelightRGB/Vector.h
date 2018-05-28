@@ -21,6 +21,10 @@ void * vec_Finalize (vec_T * _vec);
 
 LPTSTR vec_FinalizeAsString (vec_T * _str);
 
+void * vec_Get (vec_T * _vec, int index);
+
+const void * vec_GetC (const vec_T * _vec, int index);
+
 void vec_Destroy (vec_T * _vec);
 
 void vec_FreeBuf (void * _buf);

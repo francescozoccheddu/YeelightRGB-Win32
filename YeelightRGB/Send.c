@@ -8,11 +8,6 @@
 
 #pragma comment (lib, "Ws2_32.lib")
 
-#define BULB_ID "0"
-#define MSG_TOGGLE "{\"id\":" BULB_ID ",\"method\":\"toggle\",\"params\":[]}\r\n"
-#define MSG_COLOR "{\"id\":" BULB_ID ",\"method\":\"set_power\",\"params\":[\"on\", \"smooth\", 500, 2]}\r\n" \
-					"{\"id\":" BULB_ID ",\"method\":\"set_rgb\",\"params\":[%u, \"smooth\", 500]}\r\n"
-
 HANDLE send_thread = NULL;
 
 struct sockaddr_in send_addr;
@@ -20,9 +15,7 @@ struct sockaddr_in send_addr;
 HWND send_hwnd = NULL;
 UINT send_msg;
 
-COLORREF send_col;
-
-send_Result_T send_Command (const char * _msg)
+send_Result_T send_Run (const char * _data)
 {
 	SOCKET ConnectSocket = INVALID_SOCKET;
 	int iResult;
@@ -30,46 +23,40 @@ send_Result_T send_Command (const char * _msg)
 	ConnectSocket = WSASocket (AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_NO_HANDLE_INHERIT);
 	if (ConnectSocket == INVALID_SOCKET)
 	{
-		return FALSE;
+		return send_R_SOCKET_ERR;
 	}
 
 	iResult = WSAConnect (ConnectSocket, (const struct sockaddr *) &send_addr, sizeof (send_addr), NULL, NULL, NULL, NULL);
 	if (iResult == SOCKET_ERROR)
 	{
 		closesocket (ConnectSocket);
-		return FALSE;
+		return send_R_CONN_ERR;
 	}
 
 	if (ConnectSocket == INVALID_SOCKET)
 	{
-		return FALSE;
+		return send_R_CONN_ERR;
 	}
 
+	
 	size_t len;
-	StringCchLengthA (_msg, 1024, &len);
-	iResult = send (ConnectSocket, _msg, len, 0);
+	StringCchLengthA (_data, STRSAFE_MAX_CCH, &len);
+	//TODO win32
+	iResult = send (ConnectSocket, _data, len, 0);
 
 	closesocket (ConnectSocket);
 
-	return iResult == SOCKET_ERROR ? FALSE : TRUE;
+	return iResult == SOCKET_ERROR ? send_R_SEND_ERR : send_R_OK;
 }
 
 DWORD WINAPI send_thread_proc (LPVOID _param)
 {
-	char * msg = MSG_TOGGLE;
-	const COLORREF * color = (COLORREF *)_param;
-	if (color)
-	{
-		size_t len = sizeof (MSG_COLOR) / sizeof (char) + 9;
-		DWORD rgb = (GetRValue (*color) << 16) | (GetGValue (*color) << 8) | (GetBValue (*color) << 0);
-		msg = HeapAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, len * sizeof (char));
-		StringCchPrintfA (msg, len, MSG_COLOR, rgb);
-	}
-	send_Result_T res = send_Command (msg);
-	if (color)
-	{
-		HeapFree (GetProcessHeap (), 0, msg);
-	}
+	char *data = (char*)_param;
+
+	send_Result_T res = send_Run (data);
+
+	HeapFree (GetProcessHeap (), 0, data);
+
 	if (send_hwnd)
 	{
 		PostMessage (send_hwnd, send_msg, 0, (LPARAM) res);
@@ -77,63 +64,24 @@ DWORD WINAPI send_thread_proc (LPVOID _param)
 	return 0;
 }
 
-BOOL send_Toggle (void)
+BOOL send_Data (const char * _msg)
 {
-	if (!send_thread)
+	if (!send_thread || WaitForSingleObject (send_thread, 0) == WAIT_OBJECT_0)
 	{
-		send_thread = CreateThread (NULL, 0, &send_thread_proc, NULL, 0, NULL);
-	}
-	else
-	{
-		if (WaitForSingleObject (send_thread, 0) == WAIT_OBJECT_0)
+		if (send_thread)
 		{
 			CloseHandle (send_thread);
-			send_thread = CreateThread (NULL, 0, &send_thread_proc, NULL, 0, NULL);
 		}
-		else
-		{
-			return FALSE;
-		}
+		size_t len;
+		StringCchLengthA (_msg, STRSAFE_MAX_CCH, &len);
+		char *data = HeapAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, len * sizeof (char));
+		CopyMemory (data, _msg, len * sizeof (char));
+		send_thread = CreateThread (NULL, 0, &send_thread_proc, data, 0, NULL);
+		return send_thread != NULL;
 	}
-
-	if (!send_thread)
+	else
 	{
 		return FALSE;
-	}
-	else
-	{
-		return TRUE;
-	}
-}
-
-BOOL send_Color (COLORREF _color)
-{
-	if (!send_thread)
-	{
-		send_col = _color;
-		send_thread = CreateThread (NULL, 0, &send_thread_proc, &send_col, 0, NULL);
-	}
-	else
-	{
-		if (WaitForSingleObject (send_thread, 0) == WAIT_OBJECT_0)
-		{
-			CloseHandle (send_thread);
-			send_col = _color;
-			send_thread = CreateThread (NULL, 0, &send_thread_proc, &send_col, 0, NULL);
-		}
-		else
-		{
-			return FALSE;
-		}
-	}
-
-	if (!send_thread)
-	{
-		return FALSE;
-	}
-	else
-	{
-		return TRUE;
 	}
 }
 

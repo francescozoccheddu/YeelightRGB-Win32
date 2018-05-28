@@ -5,12 +5,10 @@
 
 typedef enum
 {
-	OK, SOCKET_ERR, CONN_ERR, SEND_ERR
+	send_R_OK, send_R_SOCKET_ERR, send_R_CONN_ERR, send_R_SEND_ERR
 } send_Result_T;
 
-BOOL send_Toggle (void);
-
-BOOL send_Color (COLORREF color);
+BOOL send_Data (const char * msg);
 
 void send_Dispose (void);
 

@@ -3,9 +3,11 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
+#include "Bulb.h"
+
 typedef struct
 {
-	COLORREF color;
+	bulb_Color_T color;
 	LPTSTR name;
 } conf_Preset_T;
 
@@ -34,7 +36,6 @@ typedef struct
 
 typedef struct
 {
-	DWORD64 bulbId;
 	int port;
 	int ipFields[4];
 	conf_Preset_T * presets;
@@ -44,3 +45,5 @@ typedef struct
  conf_Result_T conf_Load (LPCTSTR filename, conf_T * out);
 
  void conf_Destroy (conf_T * conf);
+
+ void conf_Empty (conf_T * conf);

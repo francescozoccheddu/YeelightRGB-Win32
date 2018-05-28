@@ -17,7 +17,14 @@ vec_T vec_Make (int _itemSize)
 
 BOOL vec_Resize (vec_T * _vec, int _size)
 {
-	_vec->buf = HeapReAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, _vec->buf, _vec->itemSize * _size);
+	if (_vec->buf)
+	{
+		_vec->buf = HeapReAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, _vec->buf, _vec->itemSize * _size);
+	}
+	else
+	{
+		_vec->buf = HeapAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, _vec->itemSize * _size);
+	}
 
 	if (!_vec->buf && _size != 0)
 	{
@@ -74,6 +81,16 @@ LPTSTR vec_FinalizeAsString (vec_T * _vec)
 	return res;
 }
 
+void * vec_Get (vec_T * _vec, int index)
+{
+	return _vec->buf + index * _vec->itemSize;
+}
+
+const void * vec_GetC (const vec_T * _vec, int index)
+{
+	return  _vec->buf + index * _vec->itemSize;
+}
+
 void vec_Destroy (vec_T * _vec)
 {
 	vec_Resize (_vec, 0);
@@ -82,6 +99,6 @@ void vec_Destroy (vec_T * _vec)
 
 void vec_FreeBuf (void * _buf)
 {
-	HeapFree (GetProcessHeap(), 0, _buf);
+	HeapFree (GetProcessHeap (), 0, _buf);
 }
 

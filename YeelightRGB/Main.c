@@ -4,8 +4,10 @@
 #include <strsafe.h>
 #include <shellapi.h>
 #include "resource.h"
+#include "Vector.h"
 
 #include "Send.h"
+#include "Bulb.h"
 #include "Configuration.h"
 
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
@@ -21,6 +23,8 @@ const int g_padding = 15;
 
 HINSTANCE g_hInstance = NULL;
 HWND g_list = NULL;
+
+conf_T g_conf;
 
 void PrintError (LPCTSTR _caption);
 
@@ -104,7 +108,7 @@ HWND CreateListView (HWND _parentHwnd)
 	return (hWndListView);
 }
 
-void ResetColorList (const conf_Preset_T * _presets, int _count)
+void ResetColorList (void)
 {
 
 	static HIMAGELIST hLargeIcons = NULL;
@@ -130,10 +134,11 @@ void ResetColorList (const conf_Preset_T * _presets, int _count)
 	hLargeIcons = ImageList_Create (cx, cy, ILC_COLOR32 | ILC_MASK, 1, 1);
 	hSmallIcons = ImageList_Create (cxSm, cySm, ILC_COLOR32 | ILC_MASK, 1, 1);
 
-	int i;
-	for (i = 0; i < _count; ++i)
+	int p;
+	for (p = 0; p < g_conf.presetCount; ++p)
 	{
-		HICON hIcon = CreateSolidColorIcon (_presets[i].color, max (cx, cy));
+		COLORREF color = bulb_ToRGB (g_conf.presets[p].color);
+		HICON hIcon = CreateSolidColorIcon (color, max (cx, cy));
 		ImageList_AddIcon (hLargeIcons, hIcon);
 		ImageList_AddIcon (hSmallIcons, hIcon);
 		DestroyIcon (hIcon);
@@ -145,32 +150,27 @@ void ResetColorList (const conf_Preset_T * _presets, int _count)
 	LVITEM lvi = { 0 };
 	lvi.mask = LVIF_TEXT | LVIF_IMAGE;
 
-	for (i = 0; i < _count; ++i)
+	for (p = 0; p < g_conf.presetCount; ++p)
 	{
-		LPTSTR text = _presets[i].name;
-		lvi.iItem = i;
+		LPTSTR text = g_conf.presets[p].name;
+		lvi.iItem = p;
 		lvi.pszText = text;
 		StringCchLength (text, 128, &lvi.cchTextMax);
-		lvi.iImage = i;
+		lvi.iImage = p;
 		SendMessage (g_list, LVM_INSERTITEM, 0, (LPARAM)&lvi);
 	}
 }
 
 void ReloadConfiguration (HWND _hwnd)
 {
-	conf_T conf;
-	conf_Result_T res = conf_Load (TryLoadString (IDS_CONF_FILENAME), &conf);
-	if (res.code == conf_RC_OK)
+	conf_Destroy (&g_conf);
+	conf_Result_T res = conf_Load (TryLoadString (IDS_CONF_FILENAME), &g_conf);
+	if (res.code != conf_RC_OK)
 	{
-		send_Set (conf.ipFields, conf.port, _hwnd, WM_SEND_RESULT);
-		ResetColorList (conf.presets, conf.presetCount);
-		conf_Destroy (&conf);
+		PrintError (TEXT("Conf"));
 	}
-	else
-	{
-		PrintError (TEXT ("ivweijfiow"));
-	}
-
+	send_Set (g_conf.ipFields, g_conf.port, _hwnd, WM_SEND_RESULT);
+	ResetColorList ();
 }
 
 void AddNotifyIcon (HWND _parent)
@@ -204,7 +204,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 				{
 					case WM_LBUTTONUP:
 					{
-						send_Color (RGB (255, 0, 0));
+						bulb_Toggle ();
 						break;
 					}
 					case WM_RBUTTONUP:
@@ -262,7 +262,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 						LPNMLISTVIEW pnmv = (LPNMLISTVIEW)_lparam;
 						if ((pnmv->uChanged   & LVIF_STATE) && (pnmv->uNewState & LVIS_SELECTED))
 						{
-							// Specific item: pnmv->iItem
+							bulb_Color (g_conf.presets[pnmv->iItem].color);
 						}
 						return TRUE;
 					}
@@ -328,6 +328,7 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 	freopen ("CON", "w", stdout);
 
 	send_Init ();
+	conf_Empty (&g_conf);
 
 	ATOM mainClassAtom = 0;
 	{
