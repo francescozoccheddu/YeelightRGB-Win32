@@ -15,51 +15,58 @@ struct sockaddr_in send_addr;
 HWND send_hwnd = NULL;
 UINT send_msg;
 
-send_Result_T send_Run (const char * _data)
+int send_Run (char * _data)
 {
 	SOCKET ConnectSocket = INVALID_SOCKET;
-	int iResult;
 
 	ConnectSocket = WSASocket (AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_NO_HANDLE_INHERIT);
 	if (ConnectSocket == INVALID_SOCKET)
 	{
-		return send_R_SOCKET_ERR;
+		return WSAGetLastError();
 	}
 
-	iResult = WSAConnect (ConnectSocket, (const struct sockaddr *) &send_addr, sizeof (send_addr), NULL, NULL, NULL, NULL);
-	if (iResult == SOCKET_ERROR)
+	if (WSAConnect (ConnectSocket, (const struct sockaddr *) &send_addr, sizeof (send_addr), NULL, NULL, NULL, NULL))
 	{
+		int error = WSAGetLastError ();
 		closesocket (ConnectSocket);
-		return send_R_CONN_ERR;
+		return error;
 	}
 
-	if (ConnectSocket == INVALID_SOCKET)
-	{
-		return send_R_CONN_ERR;
-	}
-
+	shutdown (ConnectSocket, SD_RECEIVE);
 	
-	size_t len;
-	StringCchLengthA (_data, STRSAFE_MAX_CCH, &len);
-	//TODO win32
-	iResult = send (ConnectSocket, _data, len, 0);
+	size_t chLen;
+	StringCchLengthA (_data, STRSAFE_MAX_CCH, &chLen);
+
+	WSABUF dataBuf;
+	dataBuf.buf = _data;
+	dataBuf.len = chLen * sizeof (char);
+
+	int error = 0;
+
+	DWORD sent;
+	if (WSASend (ConnectSocket, &dataBuf, 1, &sent, 0, NULL, NULL))
+	{
+		error = WSAGetLastError ();
+	}
+
+	shutdown (ConnectSocket, SD_BOTH);
 
 	closesocket (ConnectSocket);
 
-	return iResult == SOCKET_ERROR ? send_R_SEND_ERR : send_R_OK;
+	return error;
 }
 
 DWORD WINAPI send_thread_proc (LPVOID _param)
 {
 	char *data = (char*)_param;
 
-	send_Result_T res = send_Run (data);
+	int err = send_Run (data);
 
 	HeapFree (GetProcessHeap (), 0, data);
 
 	if (send_hwnd)
 	{
-		PostMessage (send_hwnd, send_msg, 0, (LPARAM) res);
+		PostMessage (send_hwnd, send_msg, 0, (LPARAM)err);
 	}
 	return 0;
 }

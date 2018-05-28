@@ -17,16 +17,22 @@
 #define WM_NOTIFYICON 110
 #define WM_SEND_RESULT 111
 
-const COLORREF g_background = RGB (50, 50, 50);
-const COLORREF g_foregroundInactive = RGB (200, 200, 200);
-const int g_padding = 15;
+#define BUSY_ERR TEXT("Error at line %u.")
+
+#define PrintLastError(x) PrintSysError(x, GetLastError())
+
+const int g_padding = 0;
 
 HINSTANCE g_hInstance = NULL;
 HWND g_list = NULL;
 
 conf_T g_conf;
 
-void PrintError (LPCTSTR _caption);
+BOOL g_busy = FALSE;
+
+void PrintSysError (UINT _captionId, UINT _error);
+
+void PrintError (UINT _captionId, UINT _textId);
 
 LPCTSTR TryLoadString (UINT _id);
 
@@ -98,11 +104,7 @@ HWND CreateListView (HWND _parentHwnd)
 
 	if (hWndListView == NULL)
 	{
-		PrintError (TryLoadString (IDS_ERROR_CREATE_CHILD_WINDOW_CAPTION));
-	}
-	else
-	{
-		ListView_SetBkColor (hWndListView, g_background);
+		PrintLastError (IDS_ERROR_CREATE_CHILD_WINDOW_CAPTION);
 	}
 
 	return (hWndListView);
@@ -167,7 +169,21 @@ void ReloadConfiguration (HWND _hwnd)
 	conf_Result_T res = conf_Load (TryLoadString (IDS_CONF_FILENAME), &g_conf);
 	if (res.code != conf_RC_OK)
 	{
-		PrintError (TEXT("Conf"));
+		switch (res.code)
+		{
+			case conf_RC_FORMERR:
+			{
+				int len = sizeof (BUSY_ERR) / sizeof (char) + 16;
+				TCHAR * text = HeapAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, len * sizeof (TCHAR));
+				StringCchPrintf (text, len, BUSY_ERR, res.data.lastFilePos);
+				MessageBox (NULL, text, TryLoadString(IDS_ERROR_CONF_LOAD_CAPTION), MB_OK | MB_ICONERROR);
+				HeapFree (GetProcessHeap (), 0, text);
+			}
+			break;
+			case conf_RC_IOERR:
+				PrintSysError (IDS_ERROR_CONF_LOAD_CAPTION, res.data.ioErr);
+				break;
+		}
 	}
 	send_Set (g_conf.ipFields, g_conf.port, _hwnd, WM_SEND_RESULT);
 	ResetColorList ();
@@ -194,8 +210,16 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 	switch (_msg)
 	{
 		case WM_SEND_RESULT:
-			printf ("Send result\n");
-			break;
+		{
+			UINT errorId = (UINT)_wparam;
+			if (errorId)
+			{
+				PrintSysError (IDS_ERROR_SEND_CAPTION, errorId);
+			}
+			g_busy = FALSE;
+			EnableWindow (g_list, TRUE);
+		}
+		break;
 		case WM_NOTIFYICON:
 		{
 			if (_wparam == IDC_NOTIFYICON)
@@ -204,8 +228,23 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 				{
 					case WM_LBUTTONUP:
 					{
-						bulb_Toggle ();
-						break;
+						if (g_busy)
+						{
+							PrintError (IDS_ERROR_SEND_CAPTION, IDS_ERROR_SEND_BUSY_TEXT);
+						}
+						else
+						{
+							if (bulb_Toggle ())
+							{
+								g_busy = TRUE;
+								EnableWindow (g_list, FALSE);
+							}
+							else
+							{
+								PrintLastError (IDS_ERROR_SEND_CAPTION);
+							}
+							break;
+						}
 					}
 					case WM_RBUTTONUP:
 					{
@@ -245,7 +284,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 		}
 		break;
 		case WM_CLOSE:
-			DestroyWindow (_hwnd);
+			ShowWindow (_hwnd, SW_HIDE);
 			break;
 		case WM_DESTROY:
 			PostQuitMessage (0);
@@ -253,36 +292,29 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 		case WM_NOTIFY:
 		{
 			NMHDR * nm = (NMHDR*)_lparam;
-			if (nm->idFrom == IDC_LIST)
+			if (nm->idFrom == IDC_LIST && nm->code == LVN_ITEMCHANGED)
 			{
-				switch (nm->code)
+				LPNMLISTVIEW pnmv = (LPNMLISTVIEW)_lparam;
+				if ((pnmv->uChanged   & LVIF_STATE) && (pnmv->uNewState & LVIS_SELECTED))
 				{
-					case LVN_ITEMCHANGED:
+					if (g_busy)
 					{
-						LPNMLISTVIEW pnmv = (LPNMLISTVIEW)_lparam;
-						if ((pnmv->uChanged   & LVIF_STATE) && (pnmv->uNewState & LVIS_SELECTED))
-						{
-							bulb_Color (g_conf.presets[pnmv->iItem].color);
-						}
-						return TRUE;
+						PrintError (IDS_ERROR_SEND_CAPTION, IDS_ERROR_SEND_BUSY_TEXT);
 					}
-					case NM_CUSTOMDRAW:
+					else
 					{
-						LPNMLVCUSTOMDRAW  lplvcd = (LPNMLVCUSTOMDRAW)_lparam;
-						switch (lplvcd->nmcd.dwDrawStage)
+						if (bulb_Color (g_conf.presets[pnmv->iItem].color))
 						{
-							case CDDS_PREPAINT:
-								return CDRF_NOTIFYITEMDRAW;
-							case CDDS_ITEMPREPAINT:
-								lplvcd->clrText = g_foregroundInactive;
-								lplvcd->clrTextBk = g_background;
-								return CDRF_NEWFONT;
-							case CDDS_SUBITEM | CDDS_ITEMPREPAINT:
-								return CDRF_NEWFONT;
+							g_busy = TRUE;
+							EnableWindow (g_list, FALSE);
 						}
-						return TRUE;
+						else
+						{
+							PrintLastError (IDS_ERROR_SEND_CAPTION);
+						}
 					}
 				}
+				return TRUE;
 			}
 		}
 		break;
@@ -298,15 +330,22 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 	return 0;
 }
 
-void PrintError (LPCTSTR _caption)
+void PrintSysError (UINT _captionId, UINT _error)
 {
-	DWORD error = GetLastError ();
+	LPCTSTR caption = TryLoadString (_captionId);
 	LPTSTR messagePtr;
-	if (FormatMessage (FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError (), 0, (LPTSTR)&messagePtr, 0, NULL) > 0)
+	if (FormatMessage (FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, 0, _error, 0, (LPTSTR)&messagePtr, 0, NULL) > 0)
 	{
-		MessageBox (NULL, messagePtr, _caption, MB_OK | MB_ICONERROR);
+		MessageBox (NULL, messagePtr, caption, MB_OK | MB_ICONERROR);
 		LocalFree (messagePtr);
 	}
+}
+
+void PrintError (UINT _captionId, UINT _textId)
+{
+	LPCTSTR caption = TryLoadString (_captionId);
+	LPCTSTR text = TryLoadString (_textId);
+	MessageBox (NULL, text, caption, MB_OK | MB_ICONERROR);
 }
 
 LPCTSTR TryLoadString (UINT _id)
@@ -314,7 +353,8 @@ LPCTSTR TryLoadString (UINT _id)
 	LPCTSTR ptr;
 	if (LoadString (g_hInstance, _id, (LPTSTR)&ptr, 0) <= 0)
 	{
-		PrintError (TEXT ("Unable to load string"));
+		MessageBox (NULL, TEXT ("String resource error"), TEXT ("Critical error"), MB_OK | MB_ICONERROR);
+		ExitProcess (1);
 	}
 	return ptr;
 }
@@ -322,10 +362,6 @@ LPCTSTR TryLoadString (UINT _id)
 int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmdLine, int _cmdShow)
 {
 	g_hInstance = _hInstance;
-
-	AllocConsole ();
-	AttachConsole (GetCurrentProcessId ());
-	freopen ("CON", "w", stdout);
 
 	send_Init ();
 	conf_Empty (&g_conf);
@@ -340,7 +376,7 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 		mainClass.hInstance = g_hInstance;
 		mainClass.hIcon = LoadIcon (g_hInstance, MAKEINTRESOURCE (IDI_ICON));
 		mainClass.hCursor = LoadCursor (NULL, IDC_ARROW);
-		mainClass.hbrBackground = (HBRUSH)CreateSolidBrush (g_background);
+		mainClass.hbrBackground = GetSysColorBrush (COLOR_WINDOW);
 		mainClass.lpszMenuName = NULL;
 		mainClass.lpszClassName = TEXT ("Main");
 		mainClassAtom = RegisterClass (&mainClass);
@@ -348,14 +384,14 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 	}
 	if (mainClassAtom == 0)
 	{
-		PrintError (TryLoadString (IDS_ERROR_REGISTER_CLASS_CAPTION));
+		PrintLastError (IDS_ERROR_REGISTER_CLASS_CAPTION);
 		return 0;
 	}
 
-	HWND window = CreateWindow (MAKEINTATOM (mainClassAtom), TryLoadString (IDS_TITLE), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 400, 400, NULL, NULL, g_hInstance, NULL);
+	HWND window = CreateWindow (MAKEINTATOM (mainClassAtom), TryLoadString (IDS_WINDOW_TITLE), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 400, 400, NULL, NULL, g_hInstance, NULL);
 	if (window == NULL)
 	{
-		PrintError (TryLoadString (IDS_ERROR_CREATE_MAIN_WINDOW_CAPTION));
+		PrintLastError (IDS_ERROR_CREATE_MAIN_WINDOW_CAPTION);
 		return 0;
 	}
 
@@ -365,7 +401,7 @@ int CALLBACK WinMain (HINSTANCE _hInstance, HINSTANCE _hPrevInstance, LPSTR _cmd
 	{
 		if (bRes == -1)
 		{
-			PrintError (TryLoadString (IDS_ERROR_MESSAGE_LOOP_CAPTION));
+			PrintLastError (IDS_ERROR_MESSAGE_LOOP_CAPTION);
 			break;
 		}
 		else
