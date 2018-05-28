@@ -26,7 +26,7 @@
 #define HKEY_VK_RELOAD_CONF 0x52
 #define HKEY_VK_TOGGLE 0x54
 
-#define BUSY_ERR TEXT("Error at line %u.")
+#define ERR_CONF_LOAD_FORM_TEXT TEXT("Error at line %u, column %u.")
 
 #define PrintLastError(x) PrintSysError(x, GetLastError())
 
@@ -188,9 +188,9 @@ void ReloadConfiguration (HWND _hwnd)
 			{
 				case conf_RC_FORMERR:
 				{
-					int len = sizeof (BUSY_ERR) / sizeof (char) + 16;
+					int len = sizeof (ERR_CONF_LOAD_FORM_TEXT) / sizeof (char) + 16;
 					TCHAR * text = HeapAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, len * sizeof (TCHAR));
-					StringCchPrintf (text, len, BUSY_ERR, res.data.lastFilePos);
+					StringCchPrintf (text, len, ERR_CONF_LOAD_FORM_TEXT, res.data.lastFilePos.line + 1, res.data.lastFilePos.column + 1);
 					MessageBox (NULL, text, TryLoadString (IDS_ERROR_CONF_LOAD_CAPTION), MB_OK | MB_ICONERROR);
 					HeapFree (GetProcessHeap (), 0, text);
 				}

@@ -237,6 +237,7 @@ BOOL _conf_Parse (_conf_FileReader_T * _fr, conf_T * _out)
 		{
 			conf_Preset_T preset;
 			_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_COLOR));
+			_conf_IgnoreSpace (_fr);
 			DWORD64 temp;
 			_conf_MUST (_conf_ParseDecInt (_fr, &temp));
 			preset.color.hue = (int)temp;
