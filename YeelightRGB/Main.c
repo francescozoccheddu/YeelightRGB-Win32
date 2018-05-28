@@ -11,8 +11,9 @@
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 #define IDC_LIST 108
-#define WM_NOTIFYICON 110
 #define IDC_NOTIFYICON 109
+#define WM_NOTIFYICON 110
+#define WM_SEND_RESULT 111
 
 const COLORREF g_background = RGB (50, 50, 50);
 const COLORREF g_foregroundInactive = RGB (200, 200, 200);
@@ -20,10 +21,6 @@ const int g_padding = 15;
 
 HINSTANCE g_hInstance = NULL;
 HWND g_list = NULL;
-
-void SendCommandProc (send_Result_T _res)
-{
-}
 
 void PrintError (LPCTSTR _caption);
 
@@ -159,13 +156,13 @@ void ResetColorList (const conf_Preset_T * _presets, int _count)
 	}
 }
 
-void ReloadConfiguration (void)
+void ReloadConfiguration (HWND _hwnd)
 {
 	conf_T conf;
 	conf_Result_T res = conf_Load (TryLoadString (IDS_CONF_FILENAME), &conf);
 	if (res.code == conf_RC_OK)
 	{
-		send_Set (conf.ipFields, conf.port, &SendCommandProc);
+		send_Set (conf.ipFields, conf.port, _hwnd, WM_SEND_RESULT);
 		ResetColorList (conf.presets, conf.presetCount);
 		conf_Destroy (&conf);
 	}
@@ -196,6 +193,9 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 
 	switch (_msg)
 	{
+		case WM_SEND_RESULT:
+			printf ("Send result\n");
+			break;
 		case WM_NOTIFYICON:
 		{
 			if (_wparam == IDC_NOTIFYICON)
@@ -204,7 +204,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 				{
 					case WM_LBUTTONUP:
 					{
-						send_Toggle ();
+						send_Color (RGB (255, 0, 0));
 						break;
 					}
 					case WM_RBUTTONUP:
@@ -230,7 +230,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 			g_list = CreateListView (_hwnd);
 			wmTaskbarCreated = RegisterWindowMessage (TEXT ("TaskbarCreated"));
 			AddNotifyIcon (_hwnd);
-			ReloadConfiguration ();
+			ReloadConfiguration (_hwnd);
 		}
 		break;
 		case WM_SIZE:

@@ -17,7 +17,7 @@ vec_T vec_Make (int _itemSize)
 
 BOOL vec_Resize (vec_T * _vec, int _size)
 {
-	_vec->buf = HeapReAlloc (GetProcessHeap (), 0, _vec->buf, _vec->itemSize * _size);
+	_vec->buf = HeapReAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, _vec->buf, _vec->itemSize * _size);
 
 	if (!_vec->buf && _size != 0)
 	{

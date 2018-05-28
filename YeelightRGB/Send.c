@@ -10,12 +10,17 @@
 
 #define BULB_ID "0"
 #define MSG_TOGGLE "{\"id\":" BULB_ID ",\"method\":\"toggle\",\"params\":[]}\r\n"
+#define MSG_COLOR "{\"id\":" BULB_ID ",\"method\":\"set_power\",\"params\":[\"on\", \"smooth\", 500, 2]}\r\n" \
+					"{\"id\":" BULB_ID ",\"method\":\"set_rgb\",\"params\":[%u, \"smooth\", 500]}\r\n"
 
-SOCKET send_socket = INVALID_SOCKET;
 HANDLE send_thread = NULL;
 
-void (*send_callback)(send_Result_T) = NULL;
 struct sockaddr_in send_addr;
+
+HWND send_hwnd = NULL;
+UINT send_msg;
+
+COLORREF send_col;
 
 send_Result_T send_Command (const char * _msg)
 {
@@ -51,15 +56,28 @@ send_Result_T send_Command (const char * _msg)
 
 DWORD WINAPI send_thread_proc (LPVOID _param)
 {
-	send_Result_T res = send_Command (MSG_TOGGLE);
-	if (send_callback)
+	char * msg = MSG_TOGGLE;
+	const COLORREF * color = (COLORREF *)_param;
+	if (color)
 	{
-		send_callback (res);
+		size_t len = sizeof (MSG_COLOR) / sizeof (char) + 9;
+		DWORD rgb = (GetRValue (*color) << 16) | (GetGValue (*color) << 8) | (GetBValue (*color) << 0);
+		msg = HeapAlloc (GetProcessHeap (), HEAP_GENERATE_EXCEPTIONS, len * sizeof (char));
+		StringCchPrintfA (msg, len, MSG_COLOR, rgb);
+	}
+	send_Result_T res = send_Command (msg);
+	if (color)
+	{
+		HeapFree (GetProcessHeap (), 0, msg);
+	}
+	if (send_hwnd)
+	{
+		PostMessage (send_hwnd, send_msg, 0, (LPARAM) res);
 	}
 	return 0;
 }
 
-BOOL send_Run ()
+BOOL send_Toggle (void)
 {
 	if (!send_thread)
 	{
@@ -88,9 +106,35 @@ BOOL send_Run ()
 	}
 }
 
-BOOL send_Toggle (void)
+BOOL send_Color (COLORREF _color)
 {
-	return send_Run ();
+	if (!send_thread)
+	{
+		send_col = _color;
+		send_thread = CreateThread (NULL, 0, &send_thread_proc, &send_col, 0, NULL);
+	}
+	else
+	{
+		if (WaitForSingleObject (send_thread, 0) == WAIT_OBJECT_0)
+		{
+			CloseHandle (send_thread);
+			send_col = _color;
+			send_thread = CreateThread (NULL, 0, &send_thread_proc, &send_col, 0, NULL);
+		}
+		else
+		{
+			return FALSE;
+		}
+	}
+
+	if (!send_thread)
+	{
+		return FALSE;
+	}
+	else
+	{
+		return TRUE;
+	}
 }
 
 void send_Dispose (void)
@@ -104,7 +148,7 @@ BOOL send_Init (void)
 	return WSAStartup (MAKEWORD (2, 2), &wsaData) == 0;
 }
 
-void send_Set (const int * _ipFields, int _port, void (*_callback)(send_Result_T))
+void send_Set (const int * _ipFields, int _port, HWND _hwnd, UINT _msg)
 {
 	struct in_addr addr;
 	addr.S_un.S_un_b.s_b1 = _ipFields[0];
@@ -114,6 +158,8 @@ void send_Set (const int * _ipFields, int _port, void (*_callback)(send_Result_T
 	send_addr.sin_family = AF_INET;
 	send_addr.sin_addr = addr;
 	send_addr.sin_port = htons (_port);
-	send_callback = _callback;
+
+	send_hwnd = _hwnd;
+	send_msg = _msg;
 }
 

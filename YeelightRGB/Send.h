@@ -10,8 +10,10 @@ typedef enum
 
 BOOL send_Toggle (void);
 
+BOOL send_Color (COLORREF color);
+
 void send_Dispose (void);
 
 BOOL send_Init (void);
 
-void send_Set (const int * ipFields, int port, void (*callback)(send_Result_T));
+void send_Set (const int * ipFields, int port, HWND hwnd, UINT msg);

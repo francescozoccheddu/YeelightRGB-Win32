@@ -274,6 +274,7 @@ BOOL _conf_Parse (_conf_FileReader_T * _fr, conf_T * _out)
 				_conf_MUST (_conf_ConsumeChar (_fr, '.'));
 			}
 			_conf_MUST (_conf_ParseDecInt (_fr, &field));
+			_conf_MUST (field < 256);
 			conf.ipFields[f] = (int)field;
 		}
 		_conf_MUST (_conf_ConsumeChar (_fr, _conf_CH_PREFIX_PORT));
@@ -321,7 +322,7 @@ BOOL _conf_Parse (_conf_FileReader_T * _fr, conf_T * _out)
 
 void conf_Preset_Destroy (conf_Preset_T * _preset)
 {
-	free (_preset->name);
+	HeapFree (GetProcessHeap(), 0, _preset->name);
 	_preset->name = NULL;
 }
 
@@ -363,7 +364,6 @@ conf_Result_T conf_Load (LPCTSTR _filename, conf_T * _out)
 
 void conf_Destroy (conf_T * _conf)
 {
-	// TODO free address
 	for (int p = 0; p < _conf->presetCount; p++)
 	{
 		conf_Preset_Destroy (&_conf->presets[p]);
