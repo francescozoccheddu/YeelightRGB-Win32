@@ -11,6 +11,7 @@
 #define IDS_CONF_FILENAME               108
 #define IDS_NOTIFYICON_TIP              109
 #define IDS_ERROR_CONF_LOAD_CAPTION     110
+#define IDS_WINDOW_TITLE_BUSY           111
 #define IDS_ERROR_BUSY_TEXT             115
 #define IDS_ERROR_SEND_CAPTION          117
 

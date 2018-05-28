@@ -31,51 +31,52 @@
 #define PrintLastError(x) PrintSysError(x, GetLastError())
 
 const int g_padding = 15;
-
 HINSTANCE g_hInstance = NULL;
 HWND g_list = NULL;
-
 conf_T g_conf;
-
 BOOL g_busy = FALSE;
 
-void PrintSysError (UINT _captionId, UINT _error);
+HICON CreateSolidColorIcon (COLORREF iconColor, int size);
 
-void PrintError (UINT _captionId, UINT _textId);
+HWND CreateListView (HWND parentHwnd);
 
-void Toggle (void);
+void ResetColorList (void);
+
+void ReloadConfiguration (HWND hwnd);
+
+void AddNotifyIcon (HWND parent);
+
+void Busy (HWND hwnd, BOOL busy);
+
+LRESULT CALLBACK MainWinProc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
+
+void PrintSysError (UINT captionId, UINT error);
+
+void PrintError (UINT captionId, UINT textId);
+
+void Toggle (HWND hwnd);
 
 LPCTSTR TryLoadString (UINT _id);
 
 HICON CreateSolidColorIcon (COLORREF iconColor, int size)
 {
-	// Obtain a handle to the screen device context.
 	HDC hdcScreen = GetDC (NULL);
 
-	// Create a memory device context, which we will draw into.
 	HDC hdcMem = CreateCompatibleDC (hdcScreen);
 
-	// Create the bitmap, and select it into the device context for drawing.
 	HBITMAP hbmp = CreateCompatibleBitmap (hdcScreen, size, size);
 	HBITMAP hbmpOld = (HBITMAP)SelectObject (hdcMem, hbmp);
-	// Draw your icon.
-	// 
-	// For this simple example, we're just drawing a solid color rectangle
-	// in the specified color with the specified dimensions.
-	HPEN hpen = CreatePen (PS_SOLID, 1, RGB (0, 0, 0));
+	COLORREF borderColor = RGB (GetRValue (iconColor) / 2, GetBValue (iconColor) / 2, GetBValue (iconColor) / 2);
+	HPEN hpen = CreatePen (PS_SOLID, 1, borderColor);
 	HPEN hpenOld = (HPEN)SelectObject (hdcMem, hpen);
 	HBRUSH hbrush = CreateSolidBrush (iconColor);
 	HBRUSH hbrushOld = (HBRUSH)SelectObject (hdcMem, hbrush);
-	Ellipse (hdcMem, 0, 0, size, size);
+	Rectangle (hdcMem, 0, 0, size, size);
 	SelectObject (hdcMem, hbrushOld);
 	SelectObject (hdcMem, hpenOld);
 	DeleteObject (hbrush);
 	DeleteObject (hpen);
 
-	// Create an icon from the bitmap.
-	// 
-	// Icons require masks to indicate transparent and opaque areas. Since this
-	// simple example has no transparent areas, we use a fully opaque mask.
 	HBITMAP hbmpMask = CreateCompatibleBitmap (hdcScreen, size, size);
 	ICONINFO ii;
 	ii.fIcon = TRUE;
@@ -84,13 +85,11 @@ HICON CreateSolidColorIcon (COLORREF iconColor, int size)
 	HICON hIcon = CreateIconIndirect (&ii);
 	DeleteObject (hbmpMask);
 
-	// Clean-up.
 	SelectObject (hdcMem, hbmpOld);
 	DeleteObject (hbmp);
 	DeleteDC (hdcMem);
 	ReleaseDC (NULL, hdcScreen);
 
-	// Return the icon.
 	return hIcon;
 }
 
@@ -141,11 +140,8 @@ void ResetColorList (void)
 
 	int cx = GetSystemMetrics (SM_CXICON);
 	int cy = GetSystemMetrics (SM_CYICON);
-	int cxSm = GetSystemMetrics (SM_CXSMICON);
-	int cySm = GetSystemMetrics (SM_CYSMICON);
 
 	hLargeIcons = ImageList_Create (cx, cy, ILC_COLOR32 | ILC_MASK, 1, 1);
-	hSmallIcons = ImageList_Create (cxSm, cySm, ILC_COLOR32 | ILC_MASK, 1, 1);
 
 	int p;
 	for (p = 0; p < g_conf.presetCount; ++p)
@@ -153,12 +149,12 @@ void ResetColorList (void)
 		COLORREF color = bulb_ToRGB (g_conf.presets[p].color);
 		HICON hIcon = CreateSolidColorIcon (color, max (cx, cy));
 		ImageList_AddIcon (hLargeIcons, hIcon);
-		ImageList_AddIcon (hSmallIcons, hIcon);
 		DestroyIcon (hIcon);
 	}
 
+	ListView_DeleteAllItems (g_list);
+
 	ListView_SetImageList (g_list, hLargeIcons, LVSIL_NORMAL);
-	ListView_SetImageList (g_list, hSmallIcons, LVSIL_SMALL);
 
 	LVITEM lvi = { 0 };
 	lvi.mask = LVIF_TEXT | LVIF_IMAGE;
@@ -168,7 +164,9 @@ void ResetColorList (void)
 		LPTSTR text = g_conf.presets[p].name;
 		lvi.iItem = p;
 		lvi.pszText = text;
-		StringCchLength (text, 128, &lvi.cchTextMax);
+		size_t len;
+		StringCchLength (text, 128, &len);
+		lvi.cchTextMax = (int) len;
 		lvi.iImage = p;
 		SendMessage (g_list, LVM_INSERTITEM, 0, (LPARAM)&lvi);
 	}
@@ -220,6 +218,13 @@ void AddNotifyIcon (HWND _parent)
 	Shell_NotifyIcon (NIM_ADD, &data);
 }
 
+void Busy (HWND _hwnd, BOOL _busy)
+{
+	g_busy = _busy;
+	EnableWindow (g_list, !_busy);
+	SetWindowText (_hwnd, TryLoadString (_busy ? IDS_WINDOW_TITLE_BUSY : IDS_WINDOW_TITLE));
+}
+
 
 LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lparam)
 {
@@ -238,7 +243,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 					ReloadConfiguration (_hwnd);
 					break;
 				case WP_HKEY_TOGGLE:
-					Toggle ();
+					Toggle (_hwnd);
 					break;
 			}
 		}
@@ -250,8 +255,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 			{
 				PrintSysError (IDS_ERROR_SEND_CAPTION, errorId);
 			}
-			g_busy = FALSE;
-			EnableWindow (g_list, TRUE);
+			Busy (_hwnd, FALSE);
 		}
 		break;
 		case WM_NOTIFYICON:
@@ -262,7 +266,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 				{
 					case WM_LBUTTONUP:
 					{
-						Toggle ();
+						Toggle (_hwnd);
 						break;
 					}
 					case WM_RBUTTONUP:
@@ -324,8 +328,7 @@ LRESULT CALLBACK MainWinProc (HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lpa
 					{
 						if (bulb_Color (g_conf.presets[pnmv->iItem].color))
 						{
-							g_busy = TRUE;
-							EnableWindow (g_list, FALSE);
+							Busy (_hwnd, TRUE);
 						}
 						else
 						{
@@ -367,7 +370,7 @@ void PrintError (UINT _captionId, UINT _textId)
 	MessageBox (NULL, text, caption, MB_OK | MB_ICONERROR);
 }
 
-void Toggle (void)
+void Toggle (HWND _hwnd)
 {
 	if (g_busy)
 	{
@@ -377,8 +380,7 @@ void Toggle (void)
 	{
 		if (bulb_Toggle ())
 		{
-			g_busy = TRUE;
-			EnableWindow (g_list, FALSE);
+			Busy (_hwnd,TRUE);
 		}
 		else
 		{

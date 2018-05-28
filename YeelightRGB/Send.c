@@ -39,7 +39,7 @@ int send_Run (char * _data)
 
 	WSABUF dataBuf;
 	dataBuf.buf = _data;
-	dataBuf.len = chLen * sizeof (char);
+	dataBuf.len = (ULONG) (chLen * sizeof (char));
 
 	int error = 0;
 
